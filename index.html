@@ -1,0 +1,1020 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>연강 이동 판정기 · 중앙대 원형관</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<!-- 지도: Leaflet + OpenStreetMap (키 없는 공개 API) -->
+<style>/* Leaflet 1.9.4 CSS (inlined) */
+/* required styles */
+
+.leaflet-pane,
+.leaflet-tile,
+.leaflet-marker-icon,
+.leaflet-marker-shadow,
+.leaflet-tile-container,
+.leaflet-pane > svg,
+.leaflet-pane > canvas,
+.leaflet-zoom-box,
+.leaflet-image-layer,
+.leaflet-layer {
+	position: absolute;
+	left: 0;
+	top: 0;
+	}
+.leaflet-container {
+	overflow: hidden;
+	}
+.leaflet-tile,
+.leaflet-marker-icon,
+.leaflet-marker-shadow {
+	-webkit-user-select: none;
+	   -moz-user-select: none;
+	        user-select: none;
+	  -webkit-user-drag: none;
+	}
+/* Prevents IE11 from highlighting tiles in blue */
+.leaflet-tile::selection {
+	background: transparent;
+}
+/* Safari renders non-retina tile on retina better with this, but Chrome is worse */
+.leaflet-safari .leaflet-tile {
+	image-rendering: -webkit-optimize-contrast;
+	}
+/* hack that prevents hw layers "stretching" when loading new tiles */
+.leaflet-safari .leaflet-tile-container {
+	width: 1600px;
+	height: 1600px;
+	-webkit-transform-origin: 0 0;
+	}
+.leaflet-marker-icon,
+.leaflet-marker-shadow {
+	display: block;
+	}
+/* .leaflet-container svg: reset svg max-width decleration shipped in Joomla! (joomla.org) 3.x */
+/* .leaflet-container img: map is broken in FF if you have max-width: 100% on tiles */
+.leaflet-container .leaflet-overlay-pane svg {
+	max-width: none !important;
+	max-height: none !important;
+	}
+.leaflet-container .leaflet-marker-pane img,
+.leaflet-container .leaflet-shadow-pane img,
+.leaflet-container .leaflet-tile-pane img,
+.leaflet-container img.leaflet-image-layer,
+.leaflet-container .leaflet-tile {
+	max-width: none !important;
+	max-height: none !important;
+	width: auto;
+	padding: 0;
+	}
+
+.leaflet-container img.leaflet-tile {
+	/* See: https://bugs.chromium.org/p/chromium/issues/detail?id=600120 */
+	mix-blend-mode: plus-lighter;
+}
+
+.leaflet-container.leaflet-touch-zoom {
+	-ms-touch-action: pan-x pan-y;
+	touch-action: pan-x pan-y;
+	}
+.leaflet-container.leaflet-touch-drag {
+	-ms-touch-action: pinch-zoom;
+	/* Fallback for FF which doesn't support pinch-zoom */
+	touch-action: none;
+	touch-action: pinch-zoom;
+}
+.leaflet-container.leaflet-touch-drag.leaflet-touch-zoom {
+	-ms-touch-action: none;
+	touch-action: none;
+}
+.leaflet-container {
+	-webkit-tap-highlight-color: transparent;
+}
+.leaflet-container a {
+	-webkit-tap-highlight-color: rgba(51, 181, 229, 0.4);
+}
+.leaflet-tile {
+	filter: inherit;
+	visibility: hidden;
+	}
+.leaflet-tile-loaded {
+	visibility: inherit;
+	}
+.leaflet-zoom-box {
+	width: 0;
+	height: 0;
+	-moz-box-sizing: border-box;
+	     box-sizing: border-box;
+	z-index: 800;
+	}
+/* workaround for https://bugzilla.mozilla.org/show_bug.cgi?id=888319 */
+.leaflet-overlay-pane svg {
+	-moz-user-select: none;
+	}
+
+.leaflet-pane         { z-index: 400; }
+
+.leaflet-tile-pane    { z-index: 200; }
+.leaflet-overlay-pane { z-index: 400; }
+.leaflet-shadow-pane  { z-index: 500; }
+.leaflet-marker-pane  { z-index: 600; }
+.leaflet-tooltip-pane   { z-index: 650; }
+.leaflet-popup-pane   { z-index: 700; }
+
+.leaflet-map-pane canvas { z-index: 100; }
+.leaflet-map-pane svg    { z-index: 200; }
+
+.leaflet-vml-shape {
+	width: 1px;
+	height: 1px;
+	}
+.lvml {
+	behavior: url(#default#VML);
+	display: inline-block;
+	position: absolute;
+	}
+
+
+/* control positioning */
+
+.leaflet-control {
+	position: relative;
+	z-index: 800;
+	pointer-events: visiblePainted; /* IE 9-10 doesn't have auto */
+	pointer-events: auto;
+	}
+.leaflet-top,
+.leaflet-bottom {
+	position: absolute;
+	z-index: 1000;
+	pointer-events: none;
+	}
+.leaflet-top {
+	top: 0;
+	}
+.leaflet-right {
+	right: 0;
+	}
+.leaflet-bottom {
+	bottom: 0;
+	}
+.leaflet-left {
+	left: 0;
+	}
+.leaflet-control {
+	float: left;
+	clear: both;
+	}
+.leaflet-right .leaflet-control {
+	float: right;
+	}
+.leaflet-top .leaflet-control {
+	margin-top: 10px;
+	}
+.leaflet-bottom .leaflet-control {
+	margin-bottom: 10px;
+	}
+.leaflet-left .leaflet-control {
+	margin-left: 10px;
+	}
+.leaflet-right .leaflet-control {
+	margin-right: 10px;
+	}
+
+
+/* zoom and fade animations */
+
+.leaflet-fade-anim .leaflet-popup {
+	opacity: 0;
+	-webkit-transition: opacity 0.2s linear;
+	   -moz-transition: opacity 0.2s linear;
+	        transition: opacity 0.2s linear;
+	}
+.leaflet-fade-anim .leaflet-map-pane .leaflet-popup {
+	opacity: 1;
+	}
+.leaflet-zoom-animated {
+	-webkit-transform-origin: 0 0;
+	    -ms-transform-origin: 0 0;
+	        transform-origin: 0 0;
+	}
+svg.leaflet-zoom-animated {
+	will-change: transform;
+}
+
+.leaflet-zoom-anim .leaflet-zoom-animated {
+	-webkit-transition: -webkit-transform 0.25s cubic-bezier(0,0,0.25,1);
+	   -moz-transition:    -moz-transform 0.25s cubic-bezier(0,0,0.25,1);
+	        transition:         transform 0.25s cubic-bezier(0,0,0.25,1);
+	}
+.leaflet-zoom-anim .leaflet-tile,
+.leaflet-pan-anim .leaflet-tile {
+	-webkit-transition: none;
+	   -moz-transition: none;
+	        transition: none;
+	}
+
+.leaflet-zoom-anim .leaflet-zoom-hide {
+	visibility: hidden;
+	}
+
+
+/* cursors */
+
+.leaflet-interactive {
+	cursor: pointer;
+	}
+.leaflet-grab {
+	cursor: -webkit-grab;
+	cursor:    -moz-grab;
+	cursor:         grab;
+	}
+.leaflet-crosshair,
+.leaflet-crosshair .leaflet-interactive {
+	cursor: crosshair;
+	}
+.leaflet-popup-pane,
+.leaflet-control {
+	cursor: auto;
+	}
+.leaflet-dragging .leaflet-grab,
+.leaflet-dragging .leaflet-grab .leaflet-interactive,
+.leaflet-dragging .leaflet-marker-draggable {
+	cursor: move;
+	cursor: -webkit-grabbing;
+	cursor:    -moz-grabbing;
+	cursor:         grabbing;
+	}
+
+/* marker & overlays interactivity */
+.leaflet-marker-icon,
+.leaflet-marker-shadow,
+.leaflet-image-layer,
+.leaflet-pane > svg path,
+.leaflet-tile-container {
+	pointer-events: none;
+	}
+
+.leaflet-marker-icon.leaflet-interactive,
+.leaflet-image-layer.leaflet-interactive,
+.leaflet-pane > svg path.leaflet-interactive,
+svg.leaflet-image-layer.leaflet-interactive path {
+	pointer-events: visiblePainted; /* IE 9-10 doesn't have auto */
+	pointer-events: auto;
+	}
+
+/* visual tweaks */
+
+.leaflet-container {
+	background: #ddd;
+	outline-offset: 1px;
+	}
+.leaflet-container a {
+	color: #0078A8;
+	}
+.leaflet-zoom-box {
+	border: 2px dotted #38f;
+	background: rgba(255,255,255,0.5);
+	}
+
+
+/* general typography */
+.leaflet-container {
+	font-family: "Helvetica Neue", Arial, Helvetica, sans-serif;
+	font-size: 12px;
+	font-size: 0.75rem;
+	line-height: 1.5;
+	}
+
+
+/* general toolbar styles */
+
+.leaflet-bar {
+	box-shadow: 0 1px 5px rgba(0,0,0,0.65);
+	border-radius: 4px;
+	}
+.leaflet-bar a {
+	background-color: #fff;
+	border-bottom: 1px solid #ccc;
+	width: 26px;
+	height: 26px;
+	line-height: 26px;
+	display: block;
+	text-align: center;
+	text-decoration: none;
+	color: black;
+	}
+.leaflet-bar a,
+.leaflet-control-layers-toggle {
+	background-position: 50% 50%;
+	background-repeat: no-repeat;
+	display: block;
+	}
+.leaflet-bar a:hover,
+.leaflet-bar a:focus {
+	background-color: #f4f4f4;
+	}
+.leaflet-bar a:first-child {
+	border-top-left-radius: 4px;
+	border-top-right-radius: 4px;
+	}
+.leaflet-bar a:last-child {
+	border-bottom-left-radius: 4px;
+	border-bottom-right-radius: 4px;
+	border-bottom: none;
+	}
+.leaflet-bar a.leaflet-disabled {
+	cursor: default;
+	background-color: #f4f4f4;
+	color: #bbb;
+	}
+
+.leaflet-touch .leaflet-bar a {
+	width: 30px;
+	height: 30px;
+	line-height: 30px;
+	}
+.leaflet-touch .leaflet-bar a:first-child {
+	border-top-left-radius: 2px;
+	border-top-right-radius: 2px;
+	}
+.leaflet-touch .leaflet-bar a:last-child {
+	border-bottom-left-radius: 2px;
+	border-bottom-right-radius: 2px;
+	}
+
+/* zoom control */
+
+.leaflet-control-zoom-in,
+.leaflet-control-zoom-out {
+	font: bold 18px 'Lucida Console', Monaco, monospace;
+	text-indent: 1px;
+	}
+
+.leaflet-touch .leaflet-control-zoom-in, .leaflet-touch .leaflet-control-zoom-out  {
+	font-size: 22px;
+	}
+
+
+/* layers control */
+
+.leaflet-control-layers {
+	box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+	background: #fff;
+	border-radius: 5px;
+	}
+.leaflet-control-layers-toggle {
+	background-image: url(images/layers.png);
+	width: 36px;
+	height: 36px;
+	}
+.leaflet-retina .leaflet-control-layers-toggle {
+	background-image: url(images/layers-2x.png);
+	background-size: 26px 26px;
+	}
+.leaflet-touch .leaflet-control-layers-toggle {
+	width: 44px;
+	height: 44px;
+	}
+.leaflet-control-layers .leaflet-control-layers-list,
+.leaflet-control-layers-expanded .leaflet-control-layers-toggle {
+	display: none;
+	}
+.leaflet-control-layers-expanded .leaflet-control-layers-list {
+	display: block;
+	position: relative;
+	}
+.leaflet-control-layers-expanded {
+	padding: 6px 10px 6px 6px;
+	color: #333;
+	background: #fff;
+	}
+.leaflet-control-layers-scrollbar {
+	overflow-y: scroll;
+	overflow-x: hidden;
+	padding-right: 5px;
+	}
+.leaflet-control-layers-selector {
+	margin-top: 2px;
+	position: relative;
+	top: 1px;
+	}
+.leaflet-control-layers label {
+	display: block;
+	font-size: 13px;
+	font-size: 1.08333em;
+	}
+.leaflet-control-layers-separator {
+	height: 0;
+	border-top: 1px solid #ddd;
+	margin: 5px -10px 5px -6px;
+	}
+
+/* Default icon URLs */
+.leaflet-default-icon-path { /* used only in path-guessing heuristic, see L.Icon.Default */
+	background-image: url(images/marker-icon.png);
+	}
+
+
+/* attribution and scale controls */
+
+.leaflet-container .leaflet-control-attribution {
+	background: #fff;
+	background: rgba(255, 255, 255, 0.8);
+	margin: 0;
+	}
+.leaflet-control-attribution,
+.leaflet-control-scale-line {
+	padding: 0 5px;
+	color: #333;
+	line-height: 1.4;
+	}
+.leaflet-control-attribution a {
+	text-decoration: none;
+	}
+.leaflet-control-attribution a:hover,
+.leaflet-control-attribution a:focus {
+	text-decoration: underline;
+	}
+.leaflet-attribution-flag {
+	display: inline !important;
+	vertical-align: baseline !important;
+	width: 1em;
+	height: 0.6669em;
+	}
+.leaflet-left .leaflet-control-scale {
+	margin-left: 5px;
+	}
+.leaflet-bottom .leaflet-control-scale {
+	margin-bottom: 5px;
+	}
+.leaflet-control-scale-line {
+	border: 2px solid #777;
+	border-top: none;
+	line-height: 1.1;
+	padding: 2px 5px 1px;
+	white-space: nowrap;
+	-moz-box-sizing: border-box;
+	     box-sizing: border-box;
+	background: rgba(255, 255, 255, 0.8);
+	text-shadow: 1px 1px #fff;
+	}
+.leaflet-control-scale-line:not(:first-child) {
+	border-top: 2px solid #777;
+	border-bottom: none;
+	margin-top: -2px;
+	}
+.leaflet-control-scale-line:not(:first-child):not(:last-child) {
+	border-bottom: 2px solid #777;
+	}
+
+.leaflet-touch .leaflet-control-attribution,
+.leaflet-touch .leaflet-control-layers,
+.leaflet-touch .leaflet-bar {
+	box-shadow: none;
+	}
+.leaflet-touch .leaflet-control-layers,
+.leaflet-touch .leaflet-bar {
+	border: 2px solid rgba(0,0,0,0.2);
+	background-clip: padding-box;
+	}
+
+
+/* popup */
+
+.leaflet-popup {
+	position: absolute;
+	text-align: center;
+	margin-bottom: 20px;
+	}
+.leaflet-popup-content-wrapper {
+	padding: 1px;
+	text-align: left;
+	border-radius: 12px;
+	}
+.leaflet-popup-content {
+	margin: 13px 24px 13px 20px;
+	line-height: 1.3;
+	font-size: 13px;
+	font-size: 1.08333em;
+	min-height: 1px;
+	}
+.leaflet-popup-content p {
+	margin: 17px 0;
+	margin: 1.3em 0;
+	}
+.leaflet-popup-tip-container {
+	width: 40px;
+	height: 20px;
+	position: absolute;
+	left: 50%;
+	margin-top: -1px;
+	margin-left: -20px;
+	overflow: hidden;
+	pointer-events: none;
+	}
+.leaflet-popup-tip {
+	width: 17px;
+	height: 17px;
+	padding: 1px;
+
+	margin: -10px auto 0;
+	pointer-events: auto;
+
+	-webkit-transform: rotate(45deg);
+	   -moz-transform: rotate(45deg);
+	    -ms-transform: rotate(45deg);
+	        transform: rotate(45deg);
+	}
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+	background: white;
+	color: #333;
+	box-shadow: 0 3px 14px rgba(0,0,0,0.4);
+	}
+.leaflet-container a.leaflet-popup-close-button {
+	position: absolute;
+	top: 0;
+	right: 0;
+	border: none;
+	text-align: center;
+	width: 24px;
+	height: 24px;
+	font: 16px/24px Tahoma, Verdana, sans-serif;
+	color: #757575;
+	text-decoration: none;
+	background: transparent;
+	}
+.leaflet-container a.leaflet-popup-close-button:hover,
+.leaflet-container a.leaflet-popup-close-button:focus {
+	color: #585858;
+	}
+.leaflet-popup-scrolled {
+	overflow: auto;
+	}
+
+.leaflet-oldie .leaflet-popup-content-wrapper {
+	-ms-zoom: 1;
+	}
+.leaflet-oldie .leaflet-popup-tip {
+	width: 24px;
+	margin: 0 auto;
+
+	-ms-filter: "progid:DXImageTransform.Microsoft.Matrix(M11=0.70710678, M12=0.70710678, M21=-0.70710678, M22=0.70710678)";
+	filter: progid:DXImageTransform.Microsoft.Matrix(M11=0.70710678, M12=0.70710678, M21=-0.70710678, M22=0.70710678);
+	}
+
+.leaflet-oldie .leaflet-control-zoom,
+.leaflet-oldie .leaflet-control-layers,
+.leaflet-oldie .leaflet-popup-content-wrapper,
+.leaflet-oldie .leaflet-popup-tip {
+	border: 1px solid #999;
+	}
+
+
+/* div icon */
+
+.leaflet-div-icon {
+	background: #fff;
+	border: 1px solid #666;
+	}
+
+
+/* Tooltip */
+/* Base styles for the element that has a tooltip */
+.leaflet-tooltip {
+	position: absolute;
+	padding: 6px;
+	background-color: #fff;
+	border: 1px solid #fff;
+	border-radius: 3px;
+	color: #222;
+	white-space: nowrap;
+	-webkit-user-select: none;
+	-moz-user-select: none;
+	-ms-user-select: none;
+	user-select: none;
+	pointer-events: none;
+	box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+	}
+.leaflet-tooltip.leaflet-interactive {
+	cursor: pointer;
+	pointer-events: auto;
+	}
+.leaflet-tooltip-top:before,
+.leaflet-tooltip-bottom:before,
+.leaflet-tooltip-left:before,
+.leaflet-tooltip-right:before {
+	position: absolute;
+	pointer-events: none;
+	border: 6px solid transparent;
+	background: transparent;
+	content: "";
+	}
+
+/* Directions */
+
+.leaflet-tooltip-bottom {
+	margin-top: 6px;
+}
+.leaflet-tooltip-top {
+	margin-top: -6px;
+}
+.leaflet-tooltip-bottom:before,
+.leaflet-tooltip-top:before {
+	left: 50%;
+	margin-left: -6px;
+	}
+.leaflet-tooltip-top:before {
+	bottom: 0;
+	margin-bottom: -12px;
+	border-top-color: #fff;
+	}
+.leaflet-tooltip-bottom:before {
+	top: 0;
+	margin-top: -12px;
+	margin-left: -6px;
+	border-bottom-color: #fff;
+	}
+.leaflet-tooltip-left {
+	margin-left: -6px;
+}
+.leaflet-tooltip-right {
+	margin-left: 6px;
+}
+.leaflet-tooltip-left:before,
+.leaflet-tooltip-right:before {
+	top: 50%;
+	margin-top: -6px;
+	}
+.leaflet-tooltip-left:before {
+	right: 0;
+	margin-right: -12px;
+	border-left-color: #fff;
+	}
+.leaflet-tooltip-right:before {
+	left: 0;
+	margin-left: -12px;
+	border-right-color: #fff;
+	}
+
+/* Printing */
+
+@media print {
+	/* Prevent printers from removing background-images of controls. */
+	.leaflet-control {
+		-webkit-print-color-adjust: exact;
+		print-color-adjust: exact;
+		}
+	}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+:root{
+  --bg:#E9EDF0; --panel:#FFFFFF; --ink:#15202B; --sub:#5B6875; --line:#CBD3DA; --field:#F4F6F8;
+  --walk:#1F5FA8; --lift:#6B4FB3; --ok:#1E8E5A; --tight:#B07A00; --late:#C93A2B;
+  --okbg:#DDF1E6; --tightbg:#FBEFCF; --latebg:#F8DEDA; --ground:#DCE6DA; --bldg:#FFFFFF;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#10161C; --panel:#18212A; --ink:#E6ECF1; --sub:#93A1AE; --line:#2C3843; --field:#202B35;
+    --walk:#5B9BE6; --lift:#9A82E0; --ok:#46C084; --tight:#E5B33A; --late:#EE6A5A;
+    --okbg:#173527; --tightbg:#3A2F12; --latebg:#3E1D19; --ground:#1B2A22; --bldg:#24313C;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#10161C; --panel:#18212A; --ink:#E6ECF1; --sub:#93A1AE; --line:#2C3843; --field:#202B35;
+  --walk:#5B9BE6; --lift:#9A82E0; --ok:#46C084; --tight:#E5B33A; --late:#EE6A5A;
+  --okbg:#173527; --tightbg:#3A2F12; --latebg:#3E1D19; --ground:#1B2A22; --bldg:#24313C;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;font-size:16px;line-height:1.55}
+.wrap{max-width:560px;margin:0 auto;padding:20px 16px 48px}
+h1{font-size:1.5rem;margin:0;letter-spacing:-0.02em}
+.lead{margin:2px 0 16px;color:var(--sub);font-size:.9rem}
+nav{display:flex;gap:4px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:4px;margin-bottom:16px}
+nav button{flex:1;border:0;background:transparent;color:var(--sub);font:inherit;font-weight:500;padding:10px 4px;border-radius:9px;cursor:pointer}
+nav button[aria-selected="true"]{background:var(--ink);color:var(--panel)}
+button:focus-visible,input:focus-visible,select:focus-visible,.leg:focus-visible{outline:3px solid var(--walk);outline-offset:2px}
+.days{display:flex;gap:6px;margin-bottom:12px}
+.days button{flex:1;font:inherit;padding:7px 0;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:8px;cursor:pointer;line-height:1.3}
+.days button[aria-pressed="true"]{border-color:var(--walk);color:var(--walk);font-weight:700}
+.days small{display:block;font-size:.66rem;color:var(--sub);font-weight:400}
+.lift{display:flex;align-items:center;gap:6px;margin-bottom:12px;font-size:.88rem;color:var(--sub)}
+.lift button{font:inherit;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:999px;padding:5px 12px;cursor:pointer}
+.lift button[aria-pressed="true"]{background:var(--lift);border-color:var(--lift);color:#fff}
+
+
+.leg{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:10px}
+.path{margin-top:8px;font-size:.86rem;color:var(--ink);padding-left:24px}
+.top{display:flex;gap:10px;align-items:flex-start}
+.light{flex:none;width:14px;height:14px;border-radius:50%;margin-top:5px}
+.light.ok{background:var(--ok)} .light.tight{background:var(--tight)} .light.late{background:var(--late)}
+.route{font-weight:700}
+.meta{color:var(--sub);font-size:.84rem}
+.say{margin-top:8px;padding:8px 10px;border-radius:9px;font-weight:500}
+.say.ok{background:var(--okbg);color:var(--ok)} .say.tight{background:var(--tightbg);color:var(--tight)} .say.late{background:var(--latebg);color:var(--late)}
+.say small{display:block;font-weight:400;color:var(--ink);opacity:.8}
+.gap{color:var(--sub);font-size:.86rem;text-align:center;padding:6px;border:1px dashed var(--line);border-radius:10px;margin-bottom:10px}
+.empty{background:var(--panel);border:1px dashed var(--line);border-radius:14px;padding:22px;text-align:center;color:var(--sub)}
+
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px}
+.card h2{font-size:1.02rem;margin:0 0 10px}
+label{display:block;font-size:.8rem;color:var(--sub);margin-bottom:4px}
+input,select{font:inherit;color:var(--ink);background:var(--field);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%;min-width:0}
+.grid{display:grid;gap:10px;grid-template-columns:1.3fr 1.2fr .6fr}
+.grid2{display:grid;gap:10px;grid-template-columns:1fr 1fr 1fr;margin-top:10px}
+@media (max-width:440px){.grid{grid-template-columns:1fr 1fr}.grid>div:first-child{grid-column:1/-1}}
+.btn{font:inherit;font-weight:500;border:0;border-radius:8px;padding:9px 14px;cursor:pointer;background:var(--ink);color:var(--panel)}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.btn.small{padding:5px 10px;font-size:.85rem;background:transparent;color:var(--late);border:1px solid var(--line)}
+.list{list-style:none;margin:0;padding:0}
+.list li{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 0;border-top:1px solid var(--line)}
+.list li:first-child{border-top:0}
+.t{color:var(--sub);font-size:.86rem;font-variant-numeric:tabular-nums}
+.msg{font-size:.85rem;margin-top:8px;min-height:1.2em}
+.msg.err{color:var(--late)} .msg.ok{color:var(--ok)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.foot{font-size:.78rem;color:var(--sub);margin-top:6px}
+[hidden]{display:none!important}
+.mapbox{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-bottom:12px}
+#map{height:260px;background:var(--field)}
+.mapcap{font-size:.8rem;color:var(--sub);padding:8px 12px}
+.leaflet-tooltip.lbl{font-family:inherit;font-size:12px;font-weight:700;padding:2px 6px}
+.leg{cursor:pointer}
+.leg[aria-pressed="true"]{border:2px solid var(--walk);padding:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>연강 이동 판정기</h1>
+  <p class="lead">중앙대 안성캠퍼스 원형관 기준. 엘리베이터까지 넣어서, 다음 수업에 늦지 않는지 봅니다.</p>
+
+  <nav role="tablist">
+    <button role="tab" data-tab="judge" aria-selected="true">판정</button>
+    <button role="tab" data-tab="timetable" aria-selected="false">시간표</button>
+  </nav>
+
+  <section id="judge">
+    <div class="days" id="judgeDays"></div>
+    <div class="lift" id="lift"></div>
+    <div class="mapbox" id="mapbox"><div id="map" role="img" aria-label="캠퍼스 지도"></div><div class="mapcap" id="mapCap"></div></div>
+    <div id="legs"></div>
+  </section>
+
+  <section id="timetable" hidden>
+    <div class="card">
+      <h2>수업 추가</h2>
+      <div class="grid">
+        <div><label for="cName">과목</label><input id="cName" placeholder="예: 전공 수업"></div>
+        <div><label for="cBuilding">건물</label><select id="cBuilding"></select></div>
+        <div><label for="cFloor">층</label><input id="cFloor" type="number" min="1" max="10" value="6"></div>
+      </div>
+      <div class="grid2">
+        <div><label for="cDay">요일</label><select id="cDay"></select></div>
+        <div><label for="cStart">시작</label><input id="cStart" type="time" value="09:00"></div>
+        <div><label for="cEnd">끝</label><input id="cEnd" type="time" value="10:15"></div>
+      </div>
+      <div class="row" style="margin-top:12px"><button class="btn" id="addClass">수업 추가</button></div>
+      <div class="msg" id="classMsg"></div>
+    </div>
+    <div class="days" id="ttDays"></div>
+    <div class="card"><ul class="list" id="classList"></ul></div>
+    <div class="row">
+      <button class="btn ghost" id="exportBtn">시간표 파일로 내보내기</button>
+      <label class="btn ghost" style="margin:0;color:var(--ink);font-size:1rem">파일 불러오기<input type="file" id="importFile" accept=".json,application/json" hidden></label>
+    </div>
+    <p class="foot" id="ioMsg">시간표는 이 브라우저에만 저장됩니다.</p>
+  </section>
+</div>
+
+<script>
+/* ---------- 고정 데이터 ---------- */
+// 좌표: Google 지도 등록 지점. 도보 = 직선거리 x 1.3 / 분당 75m + 1분(올림)
+const BUILDINGS = {
+  '원형관':[37.0013193,127.2287837],
+  '중앙도서관':[37.0031358,127.2312322],
+  '예술대학':[37.0029882,127.2290198],
+  '체육대학':[37.0018609,127.2303818],
+  '청룡체육관':[37.0002183,127.2325648],
+  '국악관':[37.0059882,127.2308088],
+  '학생복지관':[37.0066821,127.2289731],
+  '학생식당':[37.0054616,127.227504]
+};
+const STOPS = [
+  {name:'화장실', building:null, buy:3},
+  {name:'까로치아', building:'원형관', buy:4},
+  {name:'CU', building:'학생복지관', buy:3}
+];
+const RULE = {buffer:2, sameFloor:1, stairs:1, liftFrom:3, maxGap:30, lift:{busy:5, quiet:1}};
+const DAYS = ['월','화','수','목','금'];
+const KEY = 'yeongang-simple-v1';
+const SAMPLE = [
+  {id:1,day:0,name:'전공 A',building:'원형관',floor:7,start:'09:00',end:'10:15'},
+  {id:2,day:0,name:'교양 A',building:'원형관',floor:6,start:'10:30',end:'11:45'},
+  {id:3,day:0,name:'교양 B',building:'예술대학',floor:2,start:'12:00',end:'13:15'},
+  {id:4,day:1,name:'전공 B',building:'원형관',floor:7,start:'10:30',end:'11:45'},
+  {id:5,day:1,name:'교양 C',building:'국악관',floor:2,start:'12:00',end:'13:15'},
+  {id:6,day:1,name:'교양 D',building:'학생복지관',floor:1,start:'13:30',end:'14:45'},
+  {id:7,day:2,name:'교양 체육',building:'청룡체육관',floor:1,start:'09:00',end:'10:15'},
+  {id:8,day:2,name:'전공 C',building:'원형관',floor:7,start:'10:30',end:'11:45'},
+  {id:9,day:3,name:'전공 D',building:'원형관',floor:6,start:'12:00',end:'13:15'},
+  {id:10,day:3,name:'전공 E',building:'원형관',floor:6,start:'13:30',end:'14:45'}
+];
+
+/* ---------- 상태 ---------- */
+function validList(l){ return Array.isArray(l) && l.every(c => c && BUILDINGS[c.building] && typeof c.start==='string' && typeof c.end==='string'); }
+function load(){ try{ const l = JSON.parse(localStorage.getItem(KEY)); if(validList(l)) return l; }catch(e){} return structuredClone(SAMPLE); }
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(classes)); }catch(e){} }
+let classes = load();
+const wd = new Date().getDay(), isWeekday = wd>=1 && wd<=5, todayIdx = isWeekday ? wd-1 : 0;
+let judgeDay = todayIdx, ttDay = todayIdx, busy = true, selected = 0;
+
+/* ---------- 계산 ---------- */
+const toMin = t => { const [h,m] = t.split(':').map(Number); return h*60+m; };
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function meters(a,b){
+  const [la1,lo1] = BUILDINGS[a].map(x=>x*Math.PI/180), [la2,lo2] = BUILDINGS[b].map(x=>x*Math.PI/180);
+  const d = Math.sin((la2-la1)/2)**2 + Math.cos(la1)*Math.cos(la2)*Math.sin((lo2-lo1)/2)**2;
+  return 2*6371000*Math.asin(Math.sqrt(d));
+}
+const walkMin = (a,b) => a===b ? 0 : Math.ceil(meters(a,b)*1.3/75) + 1;
+const liftT = () => busy ? RULE.lift.busy : RULE.lift.quiet;
+const toGround = f => f<=1 ? 0 : f<RULE.liftFrom ? (f-1)*RULE.stairs : liftT();
+function travel(a, fa, b, fb){
+  if(a===b){ const d = Math.abs(fa-fb); return RULE.sameFloor + (d===0 ? 0 : d < RULE.liftFrom-1 ? d*RULE.stairs : liftT()); }
+  return toGround(fa) + walkMin(a,b) + toGround(fb);
+}
+function judge(p, n){
+  const gap = toMin(n.start) - toMin(p.end);
+  const direct = travel(p.building, p.floor, n.building, n.floor);
+  const slack = gap - direct - RULE.buffer;
+  const can = STOPS.filter(s => {
+    const cost = s.building ? travel(p.building,p.floor,s.building,1) + travel(s.building,1,n.building,n.floor) - direct + s.buy : s.buy;
+    return slack >= cost;
+  });
+  if(slack < 0) return {level:'late', gap, slack, can:[], title:`바로 가도 ${-slack}분 늦어요`, note:'앞 수업 끝나기 전에 짐을 챙겨두세요.'};
+  if(!can.length) return {level:'tight', gap, slack, can, title:'곧장 가세요', note:`여유 ${slack}분. 어디 들르면 늦어요.`};
+  return {level:'ok', gap, slack, can, title:`${can.map(s=>s.name).join(', ')} 들러도 돼요`, note:`여유 ${slack}분.`};
+}
+function legsOf(day){
+  const list = classes.filter(c=>c.day===day).sort((a,b)=>toMin(a.start)-toMin(b.start));
+  const out = [];
+  for(let i=0;i<list.length-1;i++){
+    const p=list[i], n=list[i+1], gap=toMin(n.start)-toMin(p.end);
+    if(gap<0) out.push({kind:'overlap',p,n});
+    else if(gap>RULE.maxGap) out.push({kind:'free',p,n,gap});
+    else out.push({kind:'leg',p,n,j:judge(p,n)});
+  }
+  return out;
+}
+
+/* ---------- 동선 문장 ---------- */
+function steps(p, n){
+  const lt = f => f<RULE.liftFrom ? `계단 ${(f-1)*RULE.stairs}분` : `엘리베이터 ${liftT()}분`;
+  if(p.building===n.building){
+    const d = Math.abs(p.floor-n.floor);
+    if(d===0) return `같은 층 강의실 이동 ${RULE.sameFloor}분`;
+    return `${p.floor}층 → ${n.floor}층 ${d < RULE.liftFrom-1 ? `계단 ${d*RULE.stairs}분` : `엘리베이터 ${liftT()}분`} → 강의실 찾아가기 ${RULE.sameFloor}분`;
+  }
+  const out = [];
+  if(p.floor>1) out.push(`${p.floor}층에서 내려가기 ${lt(p.floor)}`);
+  out.push(`${n.building}까지 걷기 ${walkMin(p.building,n.building)}분(약 ${Math.round(meters(p.building,n.building)*1.3/10)*10}m)`);
+  if(n.floor>1) out.push(`${n.floor}층 올라가기 ${lt(n.floor)}`);
+  return out.join(' → ');
+}
+
+/* ---------- 지도 (Leaflet + OpenStreetMap) ---------- */
+let map=null, layer=null, tileFail=0;
+function initMap(){
+  if(map || typeof L==='undefined'){ if(typeof L==='undefined') mapUnavailable(); return; }
+  map = L.map('map', {zoomControl:true, attributionControl:true, scrollWheelZoom:false});
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom:19, attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+  }).on('tileerror', ()=>{ if(++tileFail===4) document.getElementById('mapCap').textContent='지도 타일을 불러오지 못했어요. 판정은 그대로 쓸 수 있어요.'; }).addTo(map);
+  layer = L.layerGroup().addTo(map);
+  map.fitBounds(L.latLngBounds(Object.values(BUILDINGS)), {padding:[20,20]});
+}
+function mapUnavailable(){
+  document.getElementById('mapbox').hidden = true;
+}
+function showOnMap(leg){
+  initMap(); if(!map) return;
+  layer.clearLayers();
+  const cap = document.getElementById('mapCap');
+  const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  if(!leg){
+    Object.entries(BUILDINGS).forEach(([b,ll])=>L.circleMarker(ll,{radius:5,color:css('--sub'),weight:2,fillOpacity:.6}).bindTooltip(b).addTo(layer));
+    map.fitBounds(L.latLngBounds(Object.values(BUILDINGS)), {padding:[20,20]});
+    if(!tileFail) cap.textContent = '연강 카드를 누르면 지도에 그 구간이 표시돼요.';
+    return;
+  }
+  const A = BUILDINGS[leg.p.building], B = BUILDINGS[leg.n.building];
+  const mainColor = leg.j.level==='late' ? css('--late') : css('--walk');
+  leg.j.can.filter(s=>s.building && s.building!==leg.p.building && s.building!==leg.n.building).forEach(s=>{
+    L.polyline([A, BUILDINGS[s.building], B], {color:css('--ok'), weight:3, dashArray:'6 6'}).addTo(layer);
+    L.circleMarker(BUILDINGS[s.building],{radius:6,color:css('--ok'),fillColor:css('--ok'),fillOpacity:1}).bindTooltip(s.name,{permanent:true,direction:'top',className:'lbl'}).addTo(layer);
+  });
+  if(leg.p.building!==leg.n.building){
+    L.polyline([A,B], {color:mainColor, weight:5}).addTo(layer);
+    L.circleMarker(A,{radius:7,color:mainColor,fillColor:'#fff',fillOpacity:1,weight:3}).bindTooltip(`출발 ${leg.p.building} ${leg.p.floor}층`,{permanent:true,direction:'left',className:'lbl'}).addTo(layer);
+    L.circleMarker(B,{radius:7,color:mainColor,fillColor:mainColor,fillOpacity:1,weight:3}).bindTooltip(`도착 ${leg.n.building} ${leg.n.floor}층`,{permanent:true,direction:'right',className:'lbl'}).addTo(layer);
+    map.fitBounds(L.latLngBounds([A,B]), {padding:[50,50], maxZoom:18});
+    if(!tileFail) cap.textContent = '선은 실제 걷는 길이 아니라 두 건물을 이은 방향 표시예요.' + (leg.j.can.some(s=>s.building&&s.building!==leg.p.building&&s.building!==leg.n.building)?' 초록 점선은 들를 수 있는 곳 경유.':'');
+  }else{
+    L.circleMarker(A,{radius:9,color:mainColor,fillColor:mainColor,fillOpacity:.25,weight:3}).bindTooltip(`${leg.p.building} ${leg.p.floor}층 → ${leg.n.floor}층`,{permanent:true,direction:'top',className:'lbl'}).addTo(layer);
+    map.setView(A, 18);
+    if(!tileFail) cap.textContent = '같은 건물 안 이동이에요. 시간은 층 이동에서 들어요.';
+  }
+}
+
+/* ---------- 화면 ---------- */
+function dayButtons(el, cur, pick){
+  el.innerHTML = DAYS.map((d,i)=>`<button aria-pressed="${i===cur}" data-i="${i}">${d}${isWeekday&&i===todayIdx?'<small>오늘</small>':''}</button>`).join('');
+  el.querySelectorAll('button').forEach(b=>b.onclick=()=>pick(Number(b.dataset.i)));
+}
+function renderJudge(){
+  dayButtons(document.getElementById('judgeDays'), judgeDay, i=>{ judgeDay=i; selected=0; renderJudge(); });
+  const lift = document.getElementById('lift');
+  lift.innerHTML = `엘리베이터 <button aria-pressed="${busy}" data-b="1">붐빔 ${RULE.lift.busy}분</button><button aria-pressed="${!busy}" data-b="0">한산 ${RULE.lift.quiet}분</button>`;
+  lift.querySelectorAll('button').forEach(b=>b.onclick=()=>{ busy=b.dataset.b==='1'; renderJudge(); });
+  const legs = legsOf(judgeDay), box = document.getElementById('legs');
+  const real = legs.filter(l=>l.kind==='leg');
+  if(!real.length){
+    box.innerHTML = `<div class="empty">${DAYS[judgeDay]}요일은 연강이 없어요.</div>` + legs.map(gapHTML).join('');
+    showOnMap(null);
+    return;
+  }
+  if(selected>=real.length) selected=0;
+  let k=0;
+  box.innerHTML = legs.map(l=>{
+    if(l.kind!=='leg') return gapHTML(l);
+    const i=k++, j=l.j;
+    return `<div class="leg" role="button" tabindex="0" data-k="${i}" aria-pressed="${i===selected}">
+      <div class="top"><span class="light ${j.level}" aria-hidden="true"></span><div>
+        <div class="route">${esc(l.p.building)} ${l.p.floor}층 → ${esc(l.n.building)} ${l.n.floor}층</div>
+        <div class="meta">${l.p.end} 끝, ${l.n.start} 시작. 쉬는 시간 ${j.gap}분</div></div></div>
+      <div class="path">${steps(l.p,l.n)}</div>
+      <div class="say ${j.level}">${j.title}<small>${j.note}</small></div></div>`;
+  }).join('');
+  box.querySelectorAll('.leg').forEach(b=>{
+    const pick = ()=>{ selected=Number(b.dataset.k); renderJudge(); };
+    b.onclick = pick; b.onkeydown = e => { if(e.key==='Enter'||e.key===' '){ e.preventDefault(); pick(); } };
+  });
+  showOnMap(real[selected]);
+}
+function gapHTML(l){
+  return l.kind==='overlap' ? `<div class="gap">${esc(l.p.name)}와 ${esc(l.n.name)} 시간이 겹쳐요.</div>` : `<div class="gap">${l.p.end}–${l.n.start} 공강</div>`;
+}
+function renderTimetable(){
+  const bSel = document.getElementById('cBuilding');
+  if(!bSel.options.length) bSel.innerHTML = Object.keys(BUILDINGS).map(b=>`<option>${b}</option>`).join('');
+  document.getElementById('cDay').innerHTML = DAYS.map((d,i)=>`<option value="${i}" ${i===ttDay?'selected':''}>${d}요일</option>`).join('');
+  dayButtons(document.getElementById('ttDays'), ttDay, i=>{ ttDay=i; renderTimetable(); });
+  const list = classes.filter(c=>c.day===ttDay).sort((a,b)=>toMin(a.start)-toMin(b.start));
+  document.getElementById('classList').innerHTML = list.length ? list.map(c=>`
+    <li><div><strong>${esc(c.name)}</strong> <span class="t">${esc(c.building)} ${c.floor}층</span><br><span class="t">${c.start}–${c.end}</span></div>
+    <button class="btn small" data-del="${c.id}" aria-label="${esc(c.name)} 삭제">삭제</button></li>`).join('')
+    : `<li style="color:var(--sub)">${DAYS[ttDay]}요일 수업이 없어요.</li>`;
+  document.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{ classes=classes.filter(c=>c.id!==Number(b.dataset.del)); save(); renderTimetable(); });
+}
+document.getElementById('cBuilding').onchange = e => { document.getElementById('cFloor').value = e.target.value==='원형관' ? 6 : 1; };
+document.getElementById('addClass').onclick = () => {
+  const m = document.getElementById('classMsg');
+  const name = document.getElementById('cName').value.trim(), building = document.getElementById('cBuilding').value;
+  const floor = Math.max(1, Math.min(10, Number(document.getElementById('cFloor').value)||1));
+  const start = document.getElementById('cStart').value, end = document.getElementById('cEnd').value;
+  const day = Number(document.getElementById('cDay').value);
+  if(!name){ m.className='msg err'; m.textContent='과목 이름을 넣으세요.'; return; }
+  if(!start||!end||toMin(end)<=toMin(start)){ m.className='msg err'; m.textContent='끝나는 시간이 시작 시간보다 늦어야 해요.'; return; }
+  classes.push({id:Date.now(),day,name,building,floor,start,end}); save();
+  ttDay=day; document.getElementById('cName').value='';
+  m.className='msg ok'; m.textContent=`${DAYS[day]}요일에 ${name} 수업을 추가했어요.`; renderTimetable();
+};
+document.getElementById('exportBtn').onclick = () => {
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([JSON.stringify(classes,null,2)],{type:'application/json'}));
+  a.download='yeongang-timetable.json'; a.click(); document.getElementById('ioMsg').textContent='파일로 내보냈어요.';
+};
+document.getElementById('importFile').onchange = e => {
+  const f=e.target.files[0], m=document.getElementById('ioMsg'); if(!f) return;
+  f.text().then(t=>{ const l=JSON.parse(t); if(!validList(l)) throw 0; classes=l; save(); renderTimetable(); m.textContent='불러왔어요.'; })
+   .catch(()=>{ m.textContent='이 앱에서 내보낸 시간표 파일이 아니에요.'; });
+  e.target.value='';
+};
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('nav button').forEach(x=>x.setAttribute('aria-selected', x===b));
+  document.getElementById('judge').hidden = b.dataset.tab!=='judge';
+  document.getElementById('timetable').hidden = b.dataset.tab!=='timetable';
+  if(b.dataset.tab==='judge'){ renderJudge(); if(map) setTimeout(()=>map.invalidateSize(),0); } else renderTimetable();
+});
+renderJudge();
+</script>
+</body>
+</html>
