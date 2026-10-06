@@ -734,7 +734,7 @@ input,select{font:inherit;color:var(--ink);background:var(--field);border:1px so
 @media (max-width:440px){.grid{grid-template-columns:1fr 1fr}.grid>div:first-child{grid-column:1/-1}}
 .btn{font:inherit;font-weight:500;border:0;border-radius:8px;padding:9px 14px;cursor:pointer;background:var(--ink);color:var(--panel)}
 .btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
-.btn.small{padding:5px 10px;font-size:.85rem;background:transparent;color:var(--late);border:1px solid var(--line)}
+.btn.small{white-space:nowrap;padding:5px 10px;font-size:.85rem;background:transparent;color:var(--late);border:1px solid var(--line)}
 .list{list-style:none;margin:0;padding:0}
 .list li{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 0;border-top:1px solid var(--line)}
 .list li:first-child{border-top:0}
@@ -749,13 +749,22 @@ input,select{font:inherit;color:var(--ink);background:var(--field);border:1px so
 .mapcap{font-size:.8rem;color:var(--sub);padding:8px 12px}
 .leaflet-tooltip.lbl{font-family:inherit;font-size:12px;font-weight:700;padding:2px 6px}
 .leg{cursor:pointer}
+.week{display:grid;grid-template-columns:22px repeat(5,1fr);grid-template-rows:auto 420px;gap:0 3px}
+.wk-head{text-align:center;font-size:.8rem;color:var(--sub);padding-bottom:4px}
+.wk-head.today{color:var(--walk);font-weight:700}
+.wk-times{position:relative;font-size:.65rem;color:var(--sub)}
+.wk-times span{position:absolute;right:2px;transform:translateY(-50%)}
+.wk-col{position:relative;background:var(--field);border-radius:6px}
+.wk-b{position:absolute;left:2px;right:2px;border-radius:5px;padding:4px;overflow:hidden;color:#15202B;font-size:.68rem;line-height:1.25}
+.wk-b b{display:block;font-weight:700;word-break:keep-all}
+.wk-b span{display:block;opacity:.8;margin-top:2px}
 .leg[aria-pressed="true"]{border:2px solid var(--walk);padding:13px}
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1>연강 이동 판정기</h1>
-  <p class="lead">중앙대 안성캠퍼스 원형관 기준. 엘리베이터까지 넣어서, 다음 수업에 늦지 않는지 봅니다.</p>
+  <p class="lead">중앙대 안성캠퍼스 원형관 기준. 엘리베이터까지 넣어서, 수업 사이에 어디까지 다녀올 수 있는지 봅니다.</p>
 
   <nav role="tablist">
     <button role="tab" data-tab="judge" aria-selected="true">판정</button>
@@ -770,12 +779,13 @@ input,select{font:inherit;color:var(--ink);background:var(--field);border:1px so
   </section>
 
   <section id="timetable" hidden>
+    <div class="card"><h2>이번 학기 시간표</h2><div class="week" id="week"></div></div>
     <div class="card">
       <h2>수업 추가</h2>
       <div class="grid">
         <div><label for="cName">과목</label><input id="cName" placeholder="예: 전공 수업"></div>
         <div><label for="cBuilding">건물</label><select id="cBuilding"></select></div>
-        <div><label for="cFloor">층</label><input id="cFloor" type="number" min="1" max="10" value="6"></div>
+        <div><label for="cRoom">호실</label><input id="cRoom" inputmode="numeric" placeholder="707"></div>
       </div>
       <div class="grid2">
         <div><label for="cDay">요일</label><select id="cDay"></select></div>
@@ -791,7 +801,7 @@ input,select{font:inherit;color:var(--ink);background:var(--field);border:1px so
       <button class="btn ghost" id="exportBtn">시간표 파일로 내보내기</button>
       <label class="btn ghost" style="margin:0;color:var(--ink);font-size:1rem">파일 불러오기<input type="file" id="importFile" accept=".json,application/json" hidden></label>
     </div>
-    <p class="foot" id="ioMsg">시간표는 이 브라우저에만 저장됩니다.</p>
+    <p class="foot" id="ioMsg">기본 시간표는 데모용 예시예요(실제 과목과 강의실, 시간만 조정). 시간표는 이 브라우저에만 저장됩니다.</p>
   </section>
 </div>
 
@@ -806,27 +816,30 @@ const BUILDINGS = {
   '청룡체육관':[37.0002183,127.2325648],
   '국악관':[37.0059882,127.2308088],
   '학생복지관':[37.0066821,127.2289731],
-  '학생식당':[37.0054616,127.227504]
+  '학생식당':[37.0054616,127.227504],
+  '중앙문화관':[37.0038675,127.2292335]
 };
 const STOPS = [
   {name:'화장실', building:null, buy:3},
   {name:'까로치아', building:'원형관', buy:4},
-  {name:'CU', building:'학생복지관', buy:3}
+  {name:'CU', building:'학생복지관', buy:3},
+  {name:'학생식당 점심', building:'학생식당', buy:25}
 ];
-const RULE = {buffer:2, sameFloor:1, stairs:1, liftFrom:3, maxGap:30, lift:{busy:5, quiet:1}};
+const RULE = {buffer:2, sameFloor:1, stairs:1, liftFrom:3, maxGap:90, lift:{busy:5, quiet:1}};
 const DAYS = ['월','화','수','목','금'];
-const KEY = 'yeongang-simple-v1';
+const KEY = 'yeongang-oth-v2';
+// 데모용 예시 시간표: 실제 2026-2학기 과목과 강의실을 쓰되, 매일 연강이 생기도록 시간만 조정
 const SAMPLE = [
-  {id:1,day:0,name:'전공 A',building:'원형관',floor:7,start:'09:00',end:'10:15'},
-  {id:2,day:0,name:'교양 A',building:'원형관',floor:6,start:'10:30',end:'11:45'},
-  {id:3,day:0,name:'교양 B',building:'예술대학',floor:2,start:'12:00',end:'13:15'},
-  {id:4,day:1,name:'전공 B',building:'원형관',floor:7,start:'10:30',end:'11:45'},
-  {id:5,day:1,name:'교양 C',building:'국악관',floor:2,start:'12:00',end:'13:15'},
-  {id:6,day:1,name:'교양 D',building:'학생복지관',floor:1,start:'13:30',end:'14:45'},
-  {id:7,day:2,name:'교양 체육',building:'청룡체육관',floor:1,start:'09:00',end:'10:15'},
-  {id:8,day:2,name:'전공 C',building:'원형관',floor:7,start:'10:30',end:'11:45'},
-  {id:9,day:3,name:'전공 D',building:'원형관',floor:6,start:'12:00',end:'13:15'},
-  {id:10,day:3,name:'전공 E',building:'원형관',floor:6,start:'13:30',end:'14:45'}
+  {id:1,day:0,name:'이머시브 AI 기술',building:'원형관',room:'707',floor:7,start:'10:30',end:'13:15'},
+  {id:2,day:0,name:'피지컬컴퓨팅과제어',building:'원형관',room:'706',floor:7,start:'13:30',end:'16:15'},
+  {id:3,day:1,name:'인터랙티브 지능형 시스템 설계',building:'원형관',room:'108',floor:1,start:'10:30',end:'13:15'},
+  {id:4,day:1,name:'산업체 핸즈온 프로젝트',building:'원형관',room:'519',floor:5,start:'13:30',end:'16:15'},
+  {id:5,day:2,name:'AI 스토리텔링',building:'중앙문화관',room:'301',floor:3,start:'10:30',end:'13:15'},
+  {id:6,day:2,name:'인공지능과머신러닝',building:'원형관',room:'614',floor:6,start:'13:30',end:'16:15'},
+  {id:7,day:3,name:'캡스톤 디자인 프로젝트 I',building:'원형관',room:'108',floor:1,start:'10:30',end:'13:15'},
+  {id:8,day:3,name:'AI 스토리텔링',building:'중앙문화관',room:'301',floor:3,start:'13:30',end:'16:15'},
+  {id:9,day:4,name:'산업체 핸즈온 프로젝트',building:'원형관',room:'519',floor:5,start:'09:30',end:'12:15'},
+  {id:10,day:4,name:'이머시브 AI 기술',building:'원형관',room:'707',floor:7,start:'12:30',end:'15:15'}
 ];
 
 /* ---------- 상태 ---------- */
@@ -838,6 +851,7 @@ const wd = new Date().getDay(), isWeekday = wd>=1 && wd<=5, todayIdx = isWeekday
 let judgeDay = todayIdx, ttDay = todayIdx, busy = true, selected = 0;
 
 /* ---------- 계산 ---------- */
+const place = c => c.room ? `${esc(c.room)}호` : `${c.floor}층`;
 const toMin = t => { const [h,m] = t.split(':').map(Number); return h*60+m; };
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function meters(a,b){
@@ -862,7 +876,7 @@ function judge(p, n){
   });
   if(slack < 0) return {level:'late', gap, slack, can:[], title:`바로 가도 ${-slack}분 늦어요`, note:'앞 수업 끝나기 전에 짐을 챙겨두세요.'};
   if(!can.length) return {level:'tight', gap, slack, can, title:'곧장 가세요', note:`여유 ${slack}분. 어디 들르면 늦어요.`};
-  return {level:'ok', gap, slack, can, title:`${can.map(s=>s.name).join(', ')} 들러도 돼요`, note:`여유 ${slack}분.`};
+  return {level:'ok', gap, slack, can, title:`${can.map(s=>s.name).join(', ')}${can.length>2?' 다':''} 들러도 돼요`, note:`여유 ${slack}분.`};
 }
 function legsOf(day){
   const list = classes.filter(c=>c.day===day).sort((a,b)=>toMin(a.start)-toMin(b.start));
@@ -905,33 +919,71 @@ function initMap(){
 function mapUnavailable(){
   document.getElementById('mapbox').hidden = true;
 }
+// 도보 경로: FOSSGIS OSRM (routing.openstreetmap.de, 키 없는 공개 API). 실패하면 직선으로 표시
+const routeCache = {};
+async function footRoute(points){
+  const key = points.map(p=>p.join(',')).join(';');
+  if(routeCache[key]) return routeCache[key];
+  try{ const c = JSON.parse(localStorage.getItem('route:'+key)); if(c){ routeCache[key]=c; return c; } }catch(e){}
+  const coords = points.map(([la,lo])=>`${lo},${la}`).join(';');
+  const res = await fetch(`https://routing.openstreetmap.de/routed-foot/route/v1/foot/${coords}?overview=full&geometries=geojson`);
+  if(!res.ok) throw new Error('route');
+  const d = await res.json();
+  if(!d.routes || !d.routes.length) throw new Error('route');
+  const r = {line:d.routes[0].geometry.coordinates.map(([lo,la])=>[la,lo]), m:Math.round(d.routes[0].distance)};
+  routeCache[key] = r; try{ localStorage.setItem('route:'+key, JSON.stringify(r)); }catch(e){}
+  return r;
+}
+let drawToken = 0;
 function showOnMap(leg){
   initMap(); if(!map) return;
+  const token = ++drawToken;
   layer.clearLayers();
   const cap = document.getElementById('mapCap');
   const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
   if(!leg){
     Object.entries(BUILDINGS).forEach(([b,ll])=>L.circleMarker(ll,{radius:5,color:css('--sub'),weight:2,fillOpacity:.6}).bindTooltip(b).addTo(layer));
     map.fitBounds(L.latLngBounds(Object.values(BUILDINGS)), {padding:[20,20]});
-    if(!tileFail) cap.textContent = '연강 카드를 누르면 지도에 그 구간이 표시돼요.';
+    if(!tileFail) cap.textContent = '이동 카드를 누르면 지도에 길이 표시돼요.';
     return;
   }
   const A = BUILDINGS[leg.p.building], B = BUILDINGS[leg.n.building];
-  const mainColor = leg.j.level==='late' ? css('--late') : css('--walk');
-  leg.j.can.filter(s=>s.building && s.building!==leg.p.building && s.building!==leg.n.building).forEach(s=>{
-    L.polyline([A, BUILDINGS[s.building], B], {color:css('--ok'), weight:3, dashArray:'6 6'}).addTo(layer);
-    L.circleMarker(BUILDINGS[s.building],{radius:6,color:css('--ok'),fillColor:css('--ok'),fillOpacity:1}).bindTooltip(s.name,{permanent:true,direction:'top',className:'lbl'}).addTo(layer);
+  const main = leg.j.level==='late' ? css('--late') : css('--walk');
+  const pin = (ll, text, dir, filled, color) => L.circleMarker(ll,{radius:7,color,fillColor:filled?color:'#fff',fillOpacity:1,weight:3}).bindTooltip(text,{permanent:true,direction:dir,className:'lbl'}).addTo(layer);
+  if(leg.p.building===leg.n.building){
+    L.circleMarker(A,{radius:9,color:main,fillColor:main,fillOpacity:.25,weight:3}).bindTooltip(`${leg.p.building} ${place(leg.p)} → ${place(leg.n)}`,{permanent:true,direction:'top',className:'lbl'}).addTo(layer);
+    // 같은 건물이어도 들를 곳이 다른 건물이면 왕복 길을 보여준다
+    const away = leg.j.can.filter(s=>s.building && s.building!==leg.p.building);
+    if(away.length){
+      const s0 = away[away.length-1]; pin(BUILDINGS[s0.building], s0.name, 'top', true, css('--ok'));
+      drawRoute([A, BUILDINGS[s0.building], A], css('--ok'), true, token).then(r=>{
+        if(token!==drawToken) return;
+        cap.textContent = `같은 건물 안 이동. ${s0.name}까지 왕복 ${r.ok?`길 따라 약 ${r.m}m`:'(경로를 못 불러와 직선 표시)'}.`;
+      });
+      map.fitBounds(L.latLngBounds([A, BUILDINGS[s0.building]]), {padding:[50,50], maxZoom:18});
+    }else{
+      map.setView(A, 18);
+      if(!tileFail) cap.textContent = '같은 건물 안 이동이에요. 시간은 층 이동에서 들어요.';
+    }
+    return;
+  }
+  pin(A, `출발 ${leg.p.building} ${place(leg.p)}`, 'left', false, main);
+  pin(B, `도착 ${leg.n.building} ${place(leg.n)}`, 'right', true, main);
+  map.fitBounds(L.latLngBounds([A,B]), {padding:[50,50], maxZoom:18});
+  cap.textContent = '길을 찾는 중…';
+  drawRoute([A,B], main, false, token).then(r=>{
+    if(token!==drawToken) return;
+    cap.textContent = r.ok ? `길 따라 약 ${r.m}m (판정에 쓴 추정치 약 ${Math.round(meters(leg.p.building,leg.n.building)*1.3/10)*10}m)` : '경로를 불러오지 못해 직선으로 표시했어요. 판정은 그대로예요.';
   });
-  if(leg.p.building!==leg.n.building){
-    L.polyline([A,B], {color:mainColor, weight:5}).addTo(layer);
-    L.circleMarker(A,{radius:7,color:mainColor,fillColor:'#fff',fillOpacity:1,weight:3}).bindTooltip(`출발 ${leg.p.building} ${leg.p.floor}층`,{permanent:true,direction:'left',className:'lbl'}).addTo(layer);
-    L.circleMarker(B,{radius:7,color:mainColor,fillColor:mainColor,fillOpacity:1,weight:3}).bindTooltip(`도착 ${leg.n.building} ${leg.n.floor}층`,{permanent:true,direction:'right',className:'lbl'}).addTo(layer);
-    map.fitBounds(L.latLngBounds([A,B]), {padding:[50,50], maxZoom:18});
-    if(!tileFail) cap.textContent = '선은 실제 걷는 길이 아니라 두 건물을 이은 방향 표시예요.' + (leg.j.can.some(s=>s.building&&s.building!==leg.p.building&&s.building!==leg.n.building)?' 초록 점선은 들를 수 있는 곳 경유.':'');
-  }else{
-    L.circleMarker(A,{radius:9,color:mainColor,fillColor:mainColor,fillOpacity:.25,weight:3}).bindTooltip(`${leg.p.building} ${leg.p.floor}층 → ${leg.n.floor}층`,{permanent:true,direction:'top',className:'lbl'}).addTo(layer);
-    map.setView(A, 18);
-    if(!tileFail) cap.textContent = '같은 건물 안 이동이에요. 시간은 층 이동에서 들어요.';
+}
+async function drawRoute(points, color, dashed, token){
+  try{
+    const r = await footRoute(points);
+    if(token===drawToken) L.polyline(r.line,{color,weight:dashed?3:5,dashArray:dashed?'6 6':null}).addTo(layer);
+    return {ok:true, m:r.m};
+  }catch(e){
+    if(token===drawToken) L.polyline(points,{color,weight:dashed?3:5,dashArray:'2 8'}).addTo(layer);
+    return {ok:false};
   }
 }
 
@@ -959,8 +1011,8 @@ function renderJudge(){
     const i=k++, j=l.j;
     return `<div class="leg" role="button" tabindex="0" data-k="${i}" aria-pressed="${i===selected}">
       <div class="top"><span class="light ${j.level}" aria-hidden="true"></span><div>
-        <div class="route">${esc(l.p.building)} ${l.p.floor}층 → ${esc(l.n.building)} ${l.n.floor}층</div>
-        <div class="meta">${l.p.end} 끝, ${l.n.start} 시작. 쉬는 시간 ${j.gap}분</div></div></div>
+        <div class="route">${esc(l.p.building)} ${place(l.p)} → ${esc(l.n.building)} ${place(l.n)}</div>
+        <div class="meta">${esc(l.p.name)} ${l.p.end} 끝 → ${esc(l.n.name)} ${l.n.start} 시작. ${j.gap>30?'공강':'쉬는 시간'} ${j.gap}분</div></div></div>
       <div class="path">${steps(l.p,l.n)}</div>
       <div class="say ${j.level}">${j.title}<small>${j.note}</small></div></div>`;
   }).join('');
@@ -970,6 +1022,25 @@ function renderJudge(){
   });
   showOnMap(real[selected]);
 }
+const COLORS = ['#6A9BCB','#5FB3B0','#D1E15A','#F2D46A','#86CFEA','#EA8B6E','#F7BC1E','#B49BE0'];
+function renderWeek(){
+  const all = classes.length ? classes : [];
+  const st = Math.min(9*60, ...all.map(c=>toMin(c.start))), en = Math.max(18*60, ...all.map(c=>toMin(c.end)));
+  const span = en - st, names = [...new Set(all.map(c=>c.name))];
+  let h = '<div class="wk-head"></div>' + DAYS.map((d,i)=>`<div class="wk-head${isWeekday&&i===todayIdx?' today':''}">${d}</div>`).join('');
+  h += '<div class="wk-times">';
+  for(let t=Math.ceil(st/60)*60; t<en; t+=60) h += `<span style="top:${(t-st)/span*100}%">${t/60}</span>`;
+  h += '</div>';
+  DAYS.forEach((d,i)=>{
+    h += '<div class="wk-col">';
+    all.filter(c=>c.day===i).forEach(c=>{
+      const top=(toMin(c.start)-st)/span*100, ht=(toMin(c.end)-toMin(c.start))/span*100;
+      h += `<div class="wk-b" style="top:${top}%;height:${ht}%;background:${COLORS[names.indexOf(c.name)%COLORS.length]}" title="${esc(c.name)} ${c.start}–${c.end}"><b>${esc(c.name)}</b><span>${esc(c.building)} ${place(c)}</span></div>`;
+    });
+    h += '</div>';
+  });
+  document.getElementById('week').innerHTML = h;
+}
 function gapHTML(l){
   return l.kind==='overlap' ? `<div class="gap">${esc(l.p.name)}와 ${esc(l.n.name)} 시간이 겹쳐요.</div>` : `<div class="gap">${l.p.end}–${l.n.start} 공강</div>`;
 }
@@ -978,23 +1049,27 @@ function renderTimetable(){
   if(!bSel.options.length) bSel.innerHTML = Object.keys(BUILDINGS).map(b=>`<option>${b}</option>`).join('');
   document.getElementById('cDay').innerHTML = DAYS.map((d,i)=>`<option value="${i}" ${i===ttDay?'selected':''}>${d}요일</option>`).join('');
   dayButtons(document.getElementById('ttDays'), ttDay, i=>{ ttDay=i; renderTimetable(); });
+  renderWeek();
   const list = classes.filter(c=>c.day===ttDay).sort((a,b)=>toMin(a.start)-toMin(b.start));
   document.getElementById('classList').innerHTML = list.length ? list.map(c=>`
-    <li><div><strong>${esc(c.name)}</strong> <span class="t">${esc(c.building)} ${c.floor}층</span><br><span class="t">${c.start}–${c.end}</span></div>
+    <li><div><strong>${esc(c.name)}</strong> <span class="t">${esc(c.building)} ${place(c)} (${c.floor}층)</span><br><span class="t">${c.start}–${c.end}</span></div>
     <button class="btn small" data-del="${c.id}" aria-label="${esc(c.name)} 삭제">삭제</button></li>`).join('')
     : `<li style="color:var(--sub)">${DAYS[ttDay]}요일 수업이 없어요.</li>`;
   document.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{ classes=classes.filter(c=>c.id!==Number(b.dataset.del)); save(); renderTimetable(); });
 }
-document.getElementById('cBuilding').onchange = e => { document.getElementById('cFloor').value = e.target.value==='원형관' ? 6 : 1; };
+
 document.getElementById('addClass').onclick = () => {
   const m = document.getElementById('classMsg');
   const name = document.getElementById('cName').value.trim(), building = document.getElementById('cBuilding').value;
-  const floor = Math.max(1, Math.min(10, Number(document.getElementById('cFloor').value)||1));
+  const room = document.getElementById('cRoom').value.trim();
+  const floor = /^\d{3,4}$/.test(room) ? Math.max(1, Math.floor(Number(room)/100)) : 1;
+  if(room && !/^\d{3,4}$/.test(room)){ m.className='msg err'; m.textContent='호실은 707처럼 숫자로 넣으세요. 앞자리가 층이 돼요.'; return; }
   const start = document.getElementById('cStart').value, end = document.getElementById('cEnd').value;
   const day = Number(document.getElementById('cDay').value);
   if(!name){ m.className='msg err'; m.textContent='과목 이름을 넣으세요.'; return; }
   if(!start||!end||toMin(end)<=toMin(start)){ m.className='msg err'; m.textContent='끝나는 시간이 시작 시간보다 늦어야 해요.'; return; }
-  classes.push({id:Date.now(),day,name,building,floor,start,end}); save();
+  classes.push({id:Date.now(),day,name,building,room,floor,start,end}); save();
+  document.getElementById('cRoom').value='';
   ttDay=day; document.getElementById('cName').value='';
   m.className='msg ok'; m.textContent=`${DAYS[day]}요일에 ${name} 수업을 추가했어요.`; renderTimetable();
 };
