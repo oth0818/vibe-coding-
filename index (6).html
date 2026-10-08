@@ -1,0 +1,1050 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>공강 어디 갈까 · 중앙대 안성</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<style>/* Leaflet 1.9.4 */
+/* required styles */
+
+.leaflet-pane,
+.leaflet-tile,
+.leaflet-marker-icon,
+.leaflet-marker-shadow,
+.leaflet-tile-container,
+.leaflet-pane > svg,
+.leaflet-pane > canvas,
+.leaflet-zoom-box,
+.leaflet-image-layer,
+.leaflet-layer {
+	position: absolute;
+	left: 0;
+	top: 0;
+	}
+.leaflet-container {
+	overflow: hidden;
+	}
+.leaflet-tile,
+.leaflet-marker-icon,
+.leaflet-marker-shadow {
+	-webkit-user-select: none;
+	   -moz-user-select: none;
+	        user-select: none;
+	  -webkit-user-drag: none;
+	}
+/* Prevents IE11 from highlighting tiles in blue */
+.leaflet-tile::selection {
+	background: transparent;
+}
+/* Safari renders non-retina tile on retina better with this, but Chrome is worse */
+.leaflet-safari .leaflet-tile {
+	image-rendering: -webkit-optimize-contrast;
+	}
+/* hack that prevents hw layers "stretching" when loading new tiles */
+.leaflet-safari .leaflet-tile-container {
+	width: 1600px;
+	height: 1600px;
+	-webkit-transform-origin: 0 0;
+	}
+.leaflet-marker-icon,
+.leaflet-marker-shadow {
+	display: block;
+	}
+/* .leaflet-container svg: reset svg max-width decleration shipped in Joomla! (joomla.org) 3.x */
+/* .leaflet-container img: map is broken in FF if you have max-width: 100% on tiles */
+.leaflet-container .leaflet-overlay-pane svg {
+	max-width: none !important;
+	max-height: none !important;
+	}
+.leaflet-container .leaflet-marker-pane img,
+.leaflet-container .leaflet-shadow-pane img,
+.leaflet-container .leaflet-tile-pane img,
+.leaflet-container img.leaflet-image-layer,
+.leaflet-container .leaflet-tile {
+	max-width: none !important;
+	max-height: none !important;
+	width: auto;
+	padding: 0;
+	}
+
+.leaflet-container img.leaflet-tile {
+	/* See: https://bugs.chromium.org/p/chromium/issues/detail?id=600120 */
+	mix-blend-mode: plus-lighter;
+}
+
+.leaflet-container.leaflet-touch-zoom {
+	-ms-touch-action: pan-x pan-y;
+	touch-action: pan-x pan-y;
+	}
+.leaflet-container.leaflet-touch-drag {
+	-ms-touch-action: pinch-zoom;
+	/* Fallback for FF which doesn't support pinch-zoom */
+	touch-action: none;
+	touch-action: pinch-zoom;
+}
+.leaflet-container.leaflet-touch-drag.leaflet-touch-zoom {
+	-ms-touch-action: none;
+	touch-action: none;
+}
+.leaflet-container {
+	-webkit-tap-highlight-color: transparent;
+}
+.leaflet-container a {
+	-webkit-tap-highlight-color: rgba(51, 181, 229, 0.4);
+}
+.leaflet-tile {
+	filter: inherit;
+	visibility: hidden;
+	}
+.leaflet-tile-loaded {
+	visibility: inherit;
+	}
+.leaflet-zoom-box {
+	width: 0;
+	height: 0;
+	-moz-box-sizing: border-box;
+	     box-sizing: border-box;
+	z-index: 800;
+	}
+/* workaround for https://bugzilla.mozilla.org/show_bug.cgi?id=888319 */
+.leaflet-overlay-pane svg {
+	-moz-user-select: none;
+	}
+
+.leaflet-pane         { z-index: 400; }
+
+.leaflet-tile-pane    { z-index: 200; }
+.leaflet-overlay-pane { z-index: 400; }
+.leaflet-shadow-pane  { z-index: 500; }
+.leaflet-marker-pane  { z-index: 600; }
+.leaflet-tooltip-pane   { z-index: 650; }
+.leaflet-popup-pane   { z-index: 700; }
+
+.leaflet-map-pane canvas { z-index: 100; }
+.leaflet-map-pane svg    { z-index: 200; }
+
+.leaflet-vml-shape {
+	width: 1px;
+	height: 1px;
+	}
+.lvml {
+	behavior: url(#default#VML);
+	display: inline-block;
+	position: absolute;
+	}
+
+
+/* control positioning */
+
+.leaflet-control {
+	position: relative;
+	z-index: 800;
+	pointer-events: visiblePainted; /* IE 9-10 doesn't have auto */
+	pointer-events: auto;
+	}
+.leaflet-top,
+.leaflet-bottom {
+	position: absolute;
+	z-index: 1000;
+	pointer-events: none;
+	}
+.leaflet-top {
+	top: 0;
+	}
+.leaflet-right {
+	right: 0;
+	}
+.leaflet-bottom {
+	bottom: 0;
+	}
+.leaflet-left {
+	left: 0;
+	}
+.leaflet-control {
+	float: left;
+	clear: both;
+	}
+.leaflet-right .leaflet-control {
+	float: right;
+	}
+.leaflet-top .leaflet-control {
+	margin-top: 10px;
+	}
+.leaflet-bottom .leaflet-control {
+	margin-bottom: 10px;
+	}
+.leaflet-left .leaflet-control {
+	margin-left: 10px;
+	}
+.leaflet-right .leaflet-control {
+	margin-right: 10px;
+	}
+
+
+/* zoom and fade animations */
+
+.leaflet-fade-anim .leaflet-popup {
+	opacity: 0;
+	-webkit-transition: opacity 0.2s linear;
+	   -moz-transition: opacity 0.2s linear;
+	        transition: opacity 0.2s linear;
+	}
+.leaflet-fade-anim .leaflet-map-pane .leaflet-popup {
+	opacity: 1;
+	}
+.leaflet-zoom-animated {
+	-webkit-transform-origin: 0 0;
+	    -ms-transform-origin: 0 0;
+	        transform-origin: 0 0;
+	}
+svg.leaflet-zoom-animated {
+	will-change: transform;
+}
+
+.leaflet-zoom-anim .leaflet-zoom-animated {
+	-webkit-transition: -webkit-transform 0.25s cubic-bezier(0,0,0.25,1);
+	   -moz-transition:    -moz-transform 0.25s cubic-bezier(0,0,0.25,1);
+	        transition:         transform 0.25s cubic-bezier(0,0,0.25,1);
+	}
+.leaflet-zoom-anim .leaflet-tile,
+.leaflet-pan-anim .leaflet-tile {
+	-webkit-transition: none;
+	   -moz-transition: none;
+	        transition: none;
+	}
+
+.leaflet-zoom-anim .leaflet-zoom-hide {
+	visibility: hidden;
+	}
+
+
+/* cursors */
+
+.leaflet-interactive {
+	cursor: pointer;
+	}
+.leaflet-grab {
+	cursor: -webkit-grab;
+	cursor:    -moz-grab;
+	cursor:         grab;
+	}
+.leaflet-crosshair,
+.leaflet-crosshair .leaflet-interactive {
+	cursor: crosshair;
+	}
+.leaflet-popup-pane,
+.leaflet-control {
+	cursor: auto;
+	}
+.leaflet-dragging .leaflet-grab,
+.leaflet-dragging .leaflet-grab .leaflet-interactive,
+.leaflet-dragging .leaflet-marker-draggable {
+	cursor: move;
+	cursor: -webkit-grabbing;
+	cursor:    -moz-grabbing;
+	cursor:         grabbing;
+	}
+
+/* marker & overlays interactivity */
+.leaflet-marker-icon,
+.leaflet-marker-shadow,
+.leaflet-image-layer,
+.leaflet-pane > svg path,
+.leaflet-tile-container {
+	pointer-events: none;
+	}
+
+.leaflet-marker-icon.leaflet-interactive,
+.leaflet-image-layer.leaflet-interactive,
+.leaflet-pane > svg path.leaflet-interactive,
+svg.leaflet-image-layer.leaflet-interactive path {
+	pointer-events: visiblePainted; /* IE 9-10 doesn't have auto */
+	pointer-events: auto;
+	}
+
+/* visual tweaks */
+
+.leaflet-container {
+	background: #ddd;
+	outline-offset: 1px;
+	}
+.leaflet-container a {
+	color: #0078A8;
+	}
+.leaflet-zoom-box {
+	border: 2px dotted #38f;
+	background: rgba(255,255,255,0.5);
+	}
+
+
+/* general typography */
+.leaflet-container {
+	font-family: "Helvetica Neue", Arial, Helvetica, sans-serif;
+	font-size: 12px;
+	font-size: 0.75rem;
+	line-height: 1.5;
+	}
+
+
+/* general toolbar styles */
+
+.leaflet-bar {
+	box-shadow: 0 1px 5px rgba(0,0,0,0.65);
+	border-radius: 4px;
+	}
+.leaflet-bar a {
+	background-color: #fff;
+	border-bottom: 1px solid #ccc;
+	width: 26px;
+	height: 26px;
+	line-height: 26px;
+	display: block;
+	text-align: center;
+	text-decoration: none;
+	color: black;
+	}
+.leaflet-bar a,
+.leaflet-control-layers-toggle {
+	background-position: 50% 50%;
+	background-repeat: no-repeat;
+	display: block;
+	}
+.leaflet-bar a:hover,
+.leaflet-bar a:focus {
+	background-color: #f4f4f4;
+	}
+.leaflet-bar a:first-child {
+	border-top-left-radius: 4px;
+	border-top-right-radius: 4px;
+	}
+.leaflet-bar a:last-child {
+	border-bottom-left-radius: 4px;
+	border-bottom-right-radius: 4px;
+	border-bottom: none;
+	}
+.leaflet-bar a.leaflet-disabled {
+	cursor: default;
+	background-color: #f4f4f4;
+	color: #bbb;
+	}
+
+.leaflet-touch .leaflet-bar a {
+	width: 30px;
+	height: 30px;
+	line-height: 30px;
+	}
+.leaflet-touch .leaflet-bar a:first-child {
+	border-top-left-radius: 2px;
+	border-top-right-radius: 2px;
+	}
+.leaflet-touch .leaflet-bar a:last-child {
+	border-bottom-left-radius: 2px;
+	border-bottom-right-radius: 2px;
+	}
+
+/* zoom control */
+
+.leaflet-control-zoom-in,
+.leaflet-control-zoom-out {
+	font: bold 18px 'Lucida Console', Monaco, monospace;
+	text-indent: 1px;
+	}
+
+.leaflet-touch .leaflet-control-zoom-in, .leaflet-touch .leaflet-control-zoom-out  {
+	font-size: 22px;
+	}
+
+
+/* layers control */
+
+.leaflet-control-layers {
+	box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+	background: #fff;
+	border-radius: 5px;
+	}
+.leaflet-control-layers-toggle {
+	background-image: url(images/layers.png);
+	width: 36px;
+	height: 36px;
+	}
+.leaflet-retina .leaflet-control-layers-toggle {
+	background-image: url(images/layers-2x.png);
+	background-size: 26px 26px;
+	}
+.leaflet-touch .leaflet-control-layers-toggle {
+	width: 44px;
+	height: 44px;
+	}
+.leaflet-control-layers .leaflet-control-layers-list,
+.leaflet-control-layers-expanded .leaflet-control-layers-toggle {
+	display: none;
+	}
+.leaflet-control-layers-expanded .leaflet-control-layers-list {
+	display: block;
+	position: relative;
+	}
+.leaflet-control-layers-expanded {
+	padding: 6px 10px 6px 6px;
+	color: #333;
+	background: #fff;
+	}
+.leaflet-control-layers-scrollbar {
+	overflow-y: scroll;
+	overflow-x: hidden;
+	padding-right: 5px;
+	}
+.leaflet-control-layers-selector {
+	margin-top: 2px;
+	position: relative;
+	top: 1px;
+	}
+.leaflet-control-layers label {
+	display: block;
+	font-size: 13px;
+	font-size: 1.08333em;
+	}
+.leaflet-control-layers-separator {
+	height: 0;
+	border-top: 1px solid #ddd;
+	margin: 5px -10px 5px -6px;
+	}
+
+/* Default icon URLs */
+.leaflet-default-icon-path { /* used only in path-guessing heuristic, see L.Icon.Default */
+	background-image: url(images/marker-icon.png);
+	}
+
+
+/* attribution and scale controls */
+
+.leaflet-container .leaflet-control-attribution {
+	background: #fff;
+	background: rgba(255, 255, 255, 0.8);
+	margin: 0;
+	}
+.leaflet-control-attribution,
+.leaflet-control-scale-line {
+	padding: 0 5px;
+	color: #333;
+	line-height: 1.4;
+	}
+.leaflet-control-attribution a {
+	text-decoration: none;
+	}
+.leaflet-control-attribution a:hover,
+.leaflet-control-attribution a:focus {
+	text-decoration: underline;
+	}
+.leaflet-attribution-flag {
+	display: inline !important;
+	vertical-align: baseline !important;
+	width: 1em;
+	height: 0.6669em;
+	}
+.leaflet-left .leaflet-control-scale {
+	margin-left: 5px;
+	}
+.leaflet-bottom .leaflet-control-scale {
+	margin-bottom: 5px;
+	}
+.leaflet-control-scale-line {
+	border: 2px solid #777;
+	border-top: none;
+	line-height: 1.1;
+	padding: 2px 5px 1px;
+	white-space: nowrap;
+	-moz-box-sizing: border-box;
+	     box-sizing: border-box;
+	background: rgba(255, 255, 255, 0.8);
+	text-shadow: 1px 1px #fff;
+	}
+.leaflet-control-scale-line:not(:first-child) {
+	border-top: 2px solid #777;
+	border-bottom: none;
+	margin-top: -2px;
+	}
+.leaflet-control-scale-line:not(:first-child):not(:last-child) {
+	border-bottom: 2px solid #777;
+	}
+
+.leaflet-touch .leaflet-control-attribution,
+.leaflet-touch .leaflet-control-layers,
+.leaflet-touch .leaflet-bar {
+	box-shadow: none;
+	}
+.leaflet-touch .leaflet-control-layers,
+.leaflet-touch .leaflet-bar {
+	border: 2px solid rgba(0,0,0,0.2);
+	background-clip: padding-box;
+	}
+
+
+/* popup */
+
+.leaflet-popup {
+	position: absolute;
+	text-align: center;
+	margin-bottom: 20px;
+	}
+.leaflet-popup-content-wrapper {
+	padding: 1px;
+	text-align: left;
+	border-radius: 12px;
+	}
+.leaflet-popup-content {
+	margin: 13px 24px 13px 20px;
+	line-height: 1.3;
+	font-size: 13px;
+	font-size: 1.08333em;
+	min-height: 1px;
+	}
+.leaflet-popup-content p {
+	margin: 17px 0;
+	margin: 1.3em 0;
+	}
+.leaflet-popup-tip-container {
+	width: 40px;
+	height: 20px;
+	position: absolute;
+	left: 50%;
+	margin-top: -1px;
+	margin-left: -20px;
+	overflow: hidden;
+	pointer-events: none;
+	}
+.leaflet-popup-tip {
+	width: 17px;
+	height: 17px;
+	padding: 1px;
+
+	margin: -10px auto 0;
+	pointer-events: auto;
+
+	-webkit-transform: rotate(45deg);
+	   -moz-transform: rotate(45deg);
+	    -ms-transform: rotate(45deg);
+	        transform: rotate(45deg);
+	}
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+	background: white;
+	color: #333;
+	box-shadow: 0 3px 14px rgba(0,0,0,0.4);
+	}
+.leaflet-container a.leaflet-popup-close-button {
+	position: absolute;
+	top: 0;
+	right: 0;
+	border: none;
+	text-align: center;
+	width: 24px;
+	height: 24px;
+	font: 16px/24px Tahoma, Verdana, sans-serif;
+	color: #757575;
+	text-decoration: none;
+	background: transparent;
+	}
+.leaflet-container a.leaflet-popup-close-button:hover,
+.leaflet-container a.leaflet-popup-close-button:focus {
+	color: #585858;
+	}
+.leaflet-popup-scrolled {
+	overflow: auto;
+	}
+
+.leaflet-oldie .leaflet-popup-content-wrapper {
+	-ms-zoom: 1;
+	}
+.leaflet-oldie .leaflet-popup-tip {
+	width: 24px;
+	margin: 0 auto;
+
+	-ms-filter: "progid:DXImageTransform.Microsoft.Matrix(M11=0.70710678, M12=0.70710678, M21=-0.70710678, M22=0.70710678)";
+	filter: progid:DXImageTransform.Microsoft.Matrix(M11=0.70710678, M12=0.70710678, M21=-0.70710678, M22=0.70710678);
+	}
+
+.leaflet-oldie .leaflet-control-zoom,
+.leaflet-oldie .leaflet-control-layers,
+.leaflet-oldie .leaflet-popup-content-wrapper,
+.leaflet-oldie .leaflet-popup-tip {
+	border: 1px solid #999;
+	}
+
+
+/* div icon */
+
+.leaflet-div-icon {
+	background: #fff;
+	border: 1px solid #666;
+	}
+
+
+/* Tooltip */
+/* Base styles for the element that has a tooltip */
+.leaflet-tooltip {
+	position: absolute;
+	padding: 6px;
+	background-color: #fff;
+	border: 1px solid #fff;
+	border-radius: 3px;
+	color: #222;
+	white-space: nowrap;
+	-webkit-user-select: none;
+	-moz-user-select: none;
+	-ms-user-select: none;
+	user-select: none;
+	pointer-events: none;
+	box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+	}
+.leaflet-tooltip.leaflet-interactive {
+	cursor: pointer;
+	pointer-events: auto;
+	}
+.leaflet-tooltip-top:before,
+.leaflet-tooltip-bottom:before,
+.leaflet-tooltip-left:before,
+.leaflet-tooltip-right:before {
+	position: absolute;
+	pointer-events: none;
+	border: 6px solid transparent;
+	background: transparent;
+	content: "";
+	}
+
+/* Directions */
+
+.leaflet-tooltip-bottom {
+	margin-top: 6px;
+}
+.leaflet-tooltip-top {
+	margin-top: -6px;
+}
+.leaflet-tooltip-bottom:before,
+.leaflet-tooltip-top:before {
+	left: 50%;
+	margin-left: -6px;
+	}
+.leaflet-tooltip-top:before {
+	bottom: 0;
+	margin-bottom: -12px;
+	border-top-color: #fff;
+	}
+.leaflet-tooltip-bottom:before {
+	top: 0;
+	margin-top: -12px;
+	margin-left: -6px;
+	border-bottom-color: #fff;
+	}
+.leaflet-tooltip-left {
+	margin-left: -6px;
+}
+.leaflet-tooltip-right {
+	margin-left: 6px;
+}
+.leaflet-tooltip-left:before,
+.leaflet-tooltip-right:before {
+	top: 50%;
+	margin-top: -6px;
+	}
+.leaflet-tooltip-left:before {
+	right: 0;
+	margin-right: -12px;
+	border-left-color: #fff;
+	}
+.leaflet-tooltip-right:before {
+	left: 0;
+	margin-left: -12px;
+	border-right-color: #fff;
+	}
+
+/* Printing */
+
+@media print {
+	/* Prevent printers from removing background-images of controls. */
+	.leaflet-control {
+		-webkit-print-color-adjust: exact;
+		print-color-adjust: exact;
+		}
+	}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+:root{
+  --bg:#E9EDF0; --panel:#FFFFFF; --ink:#15202B; --sub:#5B6875; --line:#CBD3DA; --field:#F4F6F8;
+  --accent:#1F5FA8; --lift:#6B4FB3; --ok:#1E8E5A; --no:#C93A2B; --warn:#B07A00; --muted:#9AA6B2;
+  --okbg:#DDF1E6; --nobg:#F8DEDA; --warnbg:#FBEFCF;
+  box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#10161C; --panel:#18212A; --ink:#E6ECF1; --sub:#93A1AE; --line:#2C3843; --field:#202B35;
+    --accent:#5B9BE6; --lift:#9A82E0; --ok:#46C084; --no:#EE6A5A; --warn:#E5B33A; --muted:#5E6B78;
+    --okbg:#173527; --nobg:#3E1D19; --warnbg:#3A2F12;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#10161C; --panel:#18212A; --ink:#E6ECF1; --sub:#93A1AE; --line:#2C3843; --field:#202B35;
+  --accent:#5B9BE6; --lift:#9A82E0; --ok:#46C084; --no:#EE6A5A; --warn:#E5B33A; --muted:#5E6B78;
+  --okbg:#173527; --nobg:#3E1D19; --warnbg:#3A2F12;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;font-size:16px;line-height:1.55}
+.wrap{max-width:560px;margin:0 auto;padding:20px 16px 48px}
+h1{font-size:1.5rem;margin:0;letter-spacing:-0.02em}
+.lead{margin:2px 0 14px;color:var(--sub);font-size:.9rem}
+nav{display:flex;gap:4px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:4px;margin-bottom:14px}
+nav button{flex:1;border:0;background:transparent;color:var(--sub);font:inherit;font-weight:500;padding:10px 4px;border-radius:9px;cursor:pointer}
+nav button[aria-selected="true"]{background:var(--ink);color:var(--panel)}
+button,input{font:inherit} button:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+input{color:var(--ink);background:var(--field);border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-width:0}
+.days{display:flex;gap:6px;margin-bottom:10px}
+.days button{flex:1;padding:7px 0;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:8px;cursor:pointer;line-height:1.3}
+.days button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent);font-weight:700}
+.days small{display:block;font-size:.66rem;color:var(--sub);font-weight:400}
+.ctrl{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;font-size:.88rem;color:var(--sub)}
+.ctrl button{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:999px;padding:5px 12px;cursor:pointer}
+.ctrl button[aria-pressed="true"]{background:var(--lift);border-color:var(--lift);color:#fff}
+.ctrl input{width:64px;padding:5px 8px}
+.gapbox{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:10px}
+.gapbox .row1{display:flex;justify-content:space-between;align-items:baseline}
+.gapbox b{font-size:1.05rem} .gapbox .min{font-size:1.5rem;font-weight:700;color:var(--accent)}
+.gapbox .m{color:var(--sub);font-size:.84rem}
+.now{background:var(--accent);color:#fff;border-radius:10px;padding:8px 12px;margin-bottom:10px;font-weight:500;font-size:.92rem}
+.mapbox{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-bottom:10px}
+#map{height:320px;background:var(--field)}
+.mapcap{font-size:.8rem;color:var(--sub);padding:8px 12px}
+.search{display:flex;gap:6px;margin-bottom:6px}
+.search input{flex:1}
+.btn{border:0;border-radius:8px;padding:8px 14px;background:var(--ink);color:var(--panel);font-weight:500;cursor:pointer}
+.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--ink)}
+.btn.sm{padding:5px 10px;font-size:.85rem}
+.results{list-style:none;margin:0 0 10px;padding:0;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.results li button{display:block;width:100%;text-align:left;border:0;border-top:1px solid var(--line);background:transparent;color:var(--ink);padding:8px 12px;cursor:pointer;font-size:.9rem}
+.results li:first-child button{border-top:0}
+.results small{color:var(--sub)}
+.verdict{border-radius:14px;padding:14px;margin-bottom:12px;border:1px solid var(--line);background:var(--panel)}
+.verdict .head{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.verdict .name{font-weight:700;font-size:1.1rem}
+.verdict .say{margin-top:8px;padding:10px 12px;border-radius:10px;font-weight:700}
+.say.ok{background:var(--okbg);color:var(--ok)} .say.no{background:var(--nobg);color:var(--no)} .say.warn{background:var(--warnbg);color:var(--warn)}
+.say small{display:block;font-weight:400;color:var(--ink);opacity:.85}
+.breakdown{font-size:.84rem;color:var(--sub);margin-top:8px}
+.bar{display:flex;height:10px;border-radius:5px;overflow:hidden;background:var(--field);margin-top:8px}
+.bar i{display:block;height:100%}
+.list{list-style:none;margin:0;padding:0}
+.list li{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:10px 0;border-top:1px solid var(--line);cursor:pointer}
+.list li:first-child{border-top:0}
+.list .n{font-weight:700} .list .s{color:var(--sub);font-size:.8rem}
+.list .v{font-weight:700;text-align:right;font-variant-numeric:tabular-nums}
+.list .v.ok{color:var(--ok)} .list .v.no{color:var(--muted)} .list .v.warn{color:var(--warn)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:12px}
+.card h2{font-size:1rem;margin:0 0 8px}
+.pl{border-top:1px solid var(--line);padding:12px 0}
+.pl:first-of-type{border-top:0}
+.pl .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.pl label{display:block;font-size:.76rem;color:var(--sub)}
+.pl input{width:100%}
+.foot{font-size:.78rem;color:var(--sub);margin-top:6px}
+.leaflet-tooltip.lbl{font-family:inherit;font-size:12px;font-weight:700;padding:2px 6px}
+[hidden]{display:none!important}
+.week{display:grid;grid-template-columns:22px repeat(5,1fr);grid-template-rows:auto 420px;gap:0 3px}
+.wk-head{text-align:center;font-size:.8rem;color:var(--sub);padding-bottom:4px}
+.wk-head.today{color:var(--walk);font-weight:700}
+.wk-times{position:relative;font-size:.65rem;color:var(--sub)}
+.wk-times span{position:absolute;right:2px;transform:translateY(-50%)}
+.wk-col{position:relative;background:var(--field);border-radius:6px}
+.wk-b{position:absolute;left:2px;right:2px;border-radius:5px;padding:4px;overflow:hidden;color:#15202B;font-size:.68rem;line-height:1.25}
+.wk-b b{display:block;font-weight:700;word-break:keep-all}
+.wk-b span{display:block;opacity:.8;margin-top:2px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>공강 어디 갈까</h1>
+  <p class="lead">공강에 걸어서 어디까지 다녀올 수 있는지, 엘리베이터까지 넣어 계산해요.</p>
+  <nav role="tablist">
+    <button role="tab" data-tab="go" aria-selected="true">공강</button>
+    <button role="tab" data-tab="places" aria-selected="false">저장한 곳</button>
+    <button role="tab" data-tab="tt" aria-selected="false">시간표</button>
+  </nav>
+
+  <section id="go">
+    <div class="days" id="days"></div>
+    <div id="nowBar" class="now" hidden></div>
+    <div id="gapBox"></div>
+    <div id="goBody">
+      <div class="ctrl" id="lift"></div>
+      <div class="ctrl"><label for="stay">머물 시간</label><input id="stay" type="number" min="0" max="120" inputmode="numeric"><span>분 (원 범위 계산용)</span></div>
+      <div class="mapbox"><div id="map" role="img" aria-label="캠퍼스 주변 지도"></div><div class="mapcap" id="mapCap">지도를 눌러 가고 싶은 곳을 고르세요.</div></div>
+      <div class="search"><input id="q" placeholder="가게 이름 검색 (예: 부리또)" aria-label="가게 검색"><button class="btn" id="qBtn">검색</button></div>
+      <ul class="results" id="results" hidden></ul>
+      <div id="verdict"></div>
+      <div class="card"><h2>저장한 곳 한눈에</h2><ul class="list" id="savedList"></ul></div>
+    </div>
+    <p class="foot">도보 시간은 길 찾기(OpenStreetMap)로 계산하고, 실패하면 직선거리 × 1.3으로 추정해요. 엘리베이터와 머물 시간은 예시값이에요.</p>
+  </section>
+
+  <section id="places" hidden>
+    <div class="card" id="placeEdit"></div>
+    <p class="foot">예시 장소의 영업시간은 지도 정보 기준이라 바뀔 수 있어요. 직접 다녀와서 걸린 시간(편도)을 넣으면 다음부터 그 값으로 계산해요.</p>
+  </section>
+
+  <section id="tt" hidden>
+    <div class="card"><h2>2026-2학기 시간표</h2><div class="week" id="week"></div></div>
+  </section>
+</div>
+
+<script>
+/* ---------- 고정 데이터 ---------- */
+const BUILDINGS = {'원형관':[37.0013193,127.2287837],'중앙문화관':[37.0038675,127.2292335]};
+const CLASSES = [
+  {day:0,name:'이머시브 AI 기술',building:'원형관',room:'707',floor:7,start:'10:30',end:'13:30'},
+  {day:0,name:'피지컬컴퓨팅과제어',building:'원형관',room:'706',floor:7,start:'14:30',end:'17:30'},
+  {day:1,name:'인터랙티브 지능형 시스템 설계',building:'원형관',room:'108',floor:1,start:'10:30',end:'13:30'},
+  {day:1,name:'산업체 핸즈온 프로젝트',building:'원형관',room:'519',floor:5,start:'14:30',end:'17:30'},
+  {day:2,name:'인공지능과머신러닝',building:'원형관',room:'614',floor:6,start:'13:30',end:'17:30'},
+  {day:3,name:'AI 스토리텔링',building:'중앙문화관',room:'301',floor:3,start:'10:30',end:'13:30'},
+  {day:4,name:'캡스톤 디자인 프로젝트 I',building:'원형관',room:'108',floor:1,start:'09:30',end:'13:30'}
+];
+// 예시 장소 (좌표, 영업시간은 지도 정보 기준. measured = 직접 잰 편도 도보 분)
+const SAMPLE_PLACES = [
+  {id:'p1',name:'학생식당',lat:37.0054616,lng:127.227504,need:25,open:'11:00',close:'14:00',brStart:'',brEnd:'',measured:null},
+  {id:'p2',name:'까로치아 (원형관 1층)',lat:37.0013193,lng:127.2287837,need:5,open:'',close:'',brStart:'',brEnd:'',measured:1},
+  {id:'p3',name:'부리또앤',lat:37.0022322,lng:127.2267668,need:20,open:'',close:'',brStart:'',brEnd:'',measured:null},
+  {id:'p4',name:'하얀집',lat:37.0023405,lng:127.22663,need:25,open:'09:00',close:'21:00',brStart:'',brEnd:'',measured:null},
+  {id:'p5',name:'소녀식당',lat:37.0034352,lng:127.2249572,need:25,open:'12:00',close:'20:00',brStart:'',brEnd:'',measured:null},
+  {id:'p6',name:'중앙도서관',lat:37.0031358,lng:127.2312322,need:15,open:'',close:'',brStart:'',brEnd:'',measured:null},
+  {id:'p7',name:'한경대 (멀리 있는 예)',lat:37.0116265,lng:127.2642483,need:25,open:'',close:'',brStart:'',brEnd:'',measured:null}
+];
+const RULE = {buffer:2, entry:1, stairs:1, liftFrom:3, lift:{busy:5, quiet:1}, speed:75, detour:1.3, minGap:20};
+const DAYS = ['월','화','수','목','금'];
+const KEY = 'gonggang-places-v1';
+
+/* ---------- 상태 ---------- */
+const read=(k,d)=>{ try{ const v=JSON.parse(localStorage.getItem(k)); return v??d; }catch(e){ return d; } };
+const write=(k,v)=>{ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} };
+let places = read(KEY, null); if(!Array.isArray(places)) places = structuredClone(SAMPLE_PLACES);
+const now0 = new Date(), wd = now0.getDay(), isWeekday = wd>=1&&wd<=5, todayIdx = isWeekday?wd-1:0;
+let day = todayIdx, busy = true, stayMin = 25, selected = null; // selected: {name,lat,lng,id?}
+
+/* ---------- 계산 ---------- */
+const toMin=t=>{ const [h,m]=t.split(':').map(Number); return h*60+m; };
+const hm=m=>`${Math.floor(m/60)}:${String(((m%60)+60)%60).padStart(2,'0')}`;
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function meters(a,b){
+  const r=x=>x*Math.PI/180, [la1,lo1]=a.map(r), [la2,lo2]=b.map(r);
+  const d=Math.sin((la2-la1)/2)**2+Math.cos(la1)*Math.cos(la2)*Math.sin((lo2-lo1)/2)**2;
+  return 2*6371000*Math.asin(Math.sqrt(d));
+}
+const estMeters=(a,b)=>meters(a,b)*RULE.detour;
+const walkMinFromM=m=>Math.ceil(m/RULE.speed)+RULE.entry;
+const liftT=()=>busy?RULE.lift.busy:RULE.lift.quiet;
+const toGround=f=>f<=1?0:f<RULE.liftFrom?(f-1)*RULE.stairs:liftT();
+function gapsOf(d){
+  const list=CLASSES.filter(c=>c.day===d).sort((a,b)=>toMin(a.start)-toMin(b.start)), out=[];
+  for(let i=0;i<list.length-1;i++){ const g=toMin(list[i+1].start)-toMin(list[i].end); if(g>=RULE.minGap) out.push({p:list[i],n:list[i+1],gap:g}); }
+  return out;
+}
+function nowMin(){ const n=new Date(); return n.getHours()*60+n.getMinutes(); }
+// 현재 보고 있는 공강: 오늘 공강 중이면 "지금"부터 계산
+function currentGap(){
+  const g=gapsOf(day)[0]; if(!g) return null;
+  const nm=nowMin(), live = isWeekday && day===todayIdx && nm>=toMin(g.p.end) && nm<toMin(g.n.start);
+  return {...g, from: live?nm:toMin(g.p.end), live};
+}
+const origin=g=>BUILDINGS[g.p.building], back=g=>BUILDINGS[g.n.building];
+
+// 길 찾기 (FOSSGIS OSRM, 키 없음). 결과는 거리(m)와 경로선. 실패하면 null
+const routeCache={};
+async function footRoute(a,b){
+  const key=[a,b].map(p=>p.map(x=>x.toFixed(5)).join(',')).join(';');
+  if(key in routeCache) return routeCache[key];
+  routeCache[key]=null;
+  try{
+    const res=await fetch(`https://routing.openstreetmap.de/routed-foot/route/v1/foot/${a[1]},${a[0]};${b[1]},${b[0]}?overview=full&geometries=geojson`);
+    const d=await res.json(); if(!d.routes||!d.routes.length) throw 0;
+    routeCache[key]={m:d.routes[0].distance, line:d.routes[0].geometry.coordinates.map(([lo,la])=>[la,lo])};
+  }catch(e){ routeCache[key]=null; }
+  return routeCache[key];
+}
+function judge(g, dest, routeGo, routeBack){
+  const D=[dest.lat,dest.lng], avail=toMin(g.n.start)-g.from;
+  const goM = routeGo?routeGo.m:estMeters(origin(g),D), backM = routeBack?routeBack.m:estMeters(D,back(g));
+  const goWalk = dest.measured ?? walkMinFromM(goM), backWalk = dest.measured ?? walkMinFromM(backM);
+  const go = toGround(g.p.floor)+goWalk, bk = backWalk+toGround(g.n.floor);
+  const stay = avail-go-bk-RULE.buffer, need = dest.need ?? stayMin;
+  const arrive = g.from+go, leave = toMin(g.n.start)-bk-RULE.buffer;
+  let closed = '';
+  if(dest.open && dest.close && (arrive<toMin(dest.open) || arrive+Math.min(need,Math.max(stay,0))>toMin(dest.close))) closed=`영업시간 ${dest.open}~${dest.close}`;
+  if(dest.brStart && dest.brEnd && arrive<toMin(dest.brEnd) && arrive+need>toMin(dest.brStart)) closed=`브레이크타임 ${dest.brStart}~${dest.brEnd}`;
+  const level = stay<need ? 'no' : closed ? 'warn' : 'ok';
+  return {avail,go,bk,goWalk,backWalk,goM,backM,stay,need,arrive,leave,closed,level,routed:!!(routeGo&&routeBack),measured:dest.measured!=null};
+}
+
+/* ---------- 지도 ---------- */
+let map=null, lay=null, tileFail=0;
+function initMap(){
+  if(map) return true;
+  if(typeof L==='undefined'){ document.querySelector('.mapbox').hidden=true; return false; }
+  map=L.map('map',{scrollWheelZoom:false}).setView([37.0025,127.2283],16);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'})
+   .on('tileerror',()=>{ if(++tileFail===4) document.getElementById('mapCap').textContent='지도 이미지를 못 불러왔어요. 검색과 저장한 곳은 그대로 쓸 수 있어요.'; }).addTo(map);
+  lay=L.layerGroup().addTo(map);
+  map.on('click',e=>{ pick('지도에서 고른 곳',e.latlng.lat,e.latlng.lng); renderGo(); });
+  return true;
+}
+const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+function reachRadius(g){
+  // 왕복 걸을 수 있는 시간 = 남은 시간 - 엘리베이터(내려갈 때, 올라올 때) - 머물 시간 - 여유 - 출입(왕복)
+  const walkBudget = (toMin(g.n.start)-g.from) - toGround(g.p.floor) - toGround(g.n.floor) - stayMin - RULE.buffer - 2*RULE.entry;
+  return Math.max(0, walkBudget/2*RULE.speed/RULE.detour);
+}
+function drawMap(g, results){
+  if(!initMap()) return;
+  lay.clearLayers();
+  const O=origin(g), r=reachRadius(g);
+  L.circle(O,{radius:r,color:css('--ok'),weight:2,fillColor:css('--ok'),fillOpacity:.08}).addTo(lay);
+  L.circleMarker(O,{radius:7,color:css('--accent'),fillColor:css('--accent'),fillOpacity:1}).bindTooltip(`${g.p.building} ${g.p.room}호`,{permanent:true,direction:'top',className:'lbl'}).addTo(lay);
+  results.forEach(({p,j})=>{
+    const c = j.level==='ok'?css('--ok'):j.level==='warn'?css('--warn'):css('--muted');
+    L.circleMarker([p.lat,p.lng],{radius:6,color:c,fillColor:c,fillOpacity:.9,weight:2}).bindTooltip(`${p.name} · ${Math.max(0,j.stay)}분`).on('click',ev=>{ L.DomEvent.stopPropagation(ev); selected={...p}; renderGo(); }).addTo(lay);
+  });
+  if(!tileFail) document.getElementById('mapCap').textContent = `초록 원 안이면 걸어서 다녀오고 ${stayMin}분 머물 수 있어요(직선 기준 약 ${Math.round(r)}m). 지도를 누르거나 점을 눌러 보세요.`;
+}
+
+function pick(name, lat, lng){
+  const near = places.find(p=>meters([p.lat,p.lng],[lat,lng])<30);
+  selected = near ? {...near} : {name, lat, lng};
+}
+let lastFit = null;
+/* ---------- 화면: 공강 ---------- */
+let renderToken=0;
+function renderGo(){
+  const token=++renderToken;
+  const daysEl=document.getElementById('days');
+  daysEl.innerHTML=DAYS.map((d,i)=>`<button aria-pressed="${i===day}" data-i="${i}">${d}${isWeekday&&i===todayIdx?'<small>오늘</small>':''}</button>`).join('');
+  daysEl.querySelectorAll('button').forEach(b=>b.onclick=()=>{ day=Number(b.dataset.i); renderGo(); });
+  const g=currentGap(), body=document.getElementById('goBody'), box=document.getElementById('gapBox'), nb=document.getElementById('nowBar');
+  if(!g){ box.innerHTML=`<div class="gapbox">${DAYS[day]}요일은 수업 사이 공강이 없어요. 공강이 있는 요일(월, 화)을 눌러 보세요.</div>`; body.hidden=true; nb.hidden=true; return; }
+  body.hidden=false;
+  const avail=toMin(g.n.start)-g.from;
+  nb.hidden=!g.live; if(g.live) nb.textContent=`지금 공강 중이에요. ${g.n.start} 수업까지 ${avail}분 남았어요.`;
+  box.innerHTML=`<div class="gapbox"><div class="row1"><b>${g.p.end} ~ ${g.n.start}</b><span class="min">${avail}분</span></div>
+    <div class="m">${esc(g.p.building)} ${g.p.room}호(${g.p.floor}층)에서 출발 → ${esc(g.n.building)} ${g.n.room}호(${g.n.floor}층)로 돌아오기</div></div>`;
+  const lift=document.getElementById('lift');
+  lift.innerHTML=`<span>엘리베이터</span><button aria-pressed="${busy}" data-b="1">붐빔 ${RULE.lift.busy}분</button><button aria-pressed="${!busy}" data-b="0">한산 ${RULE.lift.quiet}분</button>`;
+  lift.querySelectorAll('button').forEach(b=>b.onclick=()=>{ busy=b.dataset.b==='1'; renderGo(); });
+  document.getElementById('stay').value=stayMin;
+
+  // 저장한 곳: 우선 추정치로 그리고, 길 찾기 결과가 오면 다시 그림
+  const results=places.map(p=>{ const D=[p.lat,p.lng]; return {p, j:judge(g,p,routeCache[key2(origin(g),D)],routeCache[key2(D,back(g))])}; }).sort((a,b)=>b.j.stay-a.j.stay);
+  document.getElementById('savedList').innerHTML = results.map(({p,j})=>`<li data-id="${p.id}">
+    <div><div class="n">${esc(p.name)}</div><div class="s">${j.closed?esc(j.closed)+' · ':''}오가는 데 ${j.go+j.bk}분${j.measured?' (직접 잰 값)':''}</div></div>
+    <div><div class="v ${j.level}">${j.level==='no'?`${Math.max(0,j.need-j.stay)}분 부족`:`${j.stay}분 머묾`}</div><div class="s" style="text-align:right">${j.level==='no'?'':`${hm(j.leave)}엔 출발`}</div></div></li>`).join('');
+  document.querySelectorAll('#savedList li').forEach(li=>li.onclick=()=>{ selected={...places.find(p=>p.id===li.dataset.id)}; renderGo(); window.scrollTo({top:document.getElementById('verdict').offsetTop-80,behavior:'smooth'}); });
+  drawMap(g, results);
+  renderVerdict(g, token);
+  // 비동기로 저장한 곳 길 찾기 갱신
+  places.forEach(p=>{ const D=[p.lat,p.lng]; const k1=key2(origin(g),D), k2=key2(D,back(g));
+    if(!(k1 in routeCache)||!(k2 in routeCache)) Promise.all([footRoute(origin(g),D),footRoute(D,back(g))]).then(()=>{ if(token===renderToken) renderGo(); }); });
+}
+const key2=(a,b)=>[a,b].map(p=>p.map(x=>x.toFixed(5)).join(',')).join(';');
+async function renderVerdict(g, token){
+  const v=document.getElementById('verdict');
+  if(!selected){ v.innerHTML=''; return; }
+  const D=[selected.lat,selected.lng], saved=places.find(p=>p.id===selected.id);
+  const dest = saved || {...selected, need:stayMin, measured:null};
+  const draw=(rg,rb)=>{
+    const j=judge(g,dest,rg,rb), tot=j.avail, w=x=>(Math.max(0,x)/tot*100).toFixed(1)+'%';
+    const say = j.level==='ok' ? `<div class="say ok">갈 수 있어요 · ${j.stay}분 머물 수 있어요<small>늦어도 ${hm(j.leave)}엔 출발하세요. 도착 예상 ${hm(j.arrive)}.</small></div>`
+      : j.level==='warn' ? `<div class="say warn">시간은 되지만 ${esc(j.closed)}이라 문을 닫았을 수 있어요<small>${j.stay}분 머물 수 있어요. 늦어도 ${hm(j.leave)}엔 출발.</small></div>`
+      : `<div class="say no">안 돼요 · ${Math.max(0,j.need-j.stay)}분 부족해요<small>오가는 데만 ${j.go+j.bk}분이라 ${j.need}분 머물 시간이 없어요.</small></div>`;
+    v.innerHTML=`<div class="verdict"><div class="head"><span class="name">${esc(dest.name)}</span><span class="breakdown">${j.routed?'길 따라':'직선 추정'} 편도 약 ${Math.round(j.goM)}m</span></div>
+      ${say}
+      <div class="bar" aria-hidden="true"><i style="width:${w(toGround(g.p.floor))};background:var(--lift)"></i><i style="width:${w(j.goWalk)};background:var(--accent)"></i><i style="width:${w(j.stay)};background:${j.level==='no'?'var(--muted)':'var(--ok)'}"></i><i style="width:${w(j.backWalk)};background:var(--accent)"></i><i style="width:${w(toGround(g.n.floor))};background:var(--lift)"></i></div>
+      <div class="breakdown">엘리베이터 ${toGround(g.p.floor)}분 → 걷기 ${j.goWalk}분 → <b>머묾 ${Math.max(0,j.stay)}분</b> → 걷기 ${j.backWalk}분 → 엘리베이터 ${toGround(g.n.floor)}분 · 여유 ${RULE.buffer}분${j.measured?' · 도보는 직접 잰 값':''}</div>
+      <div class="ctrl" style="margin:10px 0 0">${saved?`<button class="btn ghost sm" id="toEdit">시간·영업시간 고치기</button>`:`<input id="saveName" placeholder="이름 (예: 타코집)" style="width:auto;flex:1"><button class="btn sm" id="saveBtn">저장</button>`}</div></div>`;
+    if(saved) document.getElementById('toEdit').onclick=()=>document.querySelector('[data-tab=places]').click();
+    else document.getElementById('saveBtn').onclick=()=>{
+      const name=document.getElementById('saveName').value.trim()||selected.name;
+      const p={id:'u'+Date.now(),name,lat:selected.lat,lng:selected.lng,need:stayMin,open:'',close:'',brStart:'',brEnd:'',measured:null};
+      places.push(p); write(KEY,places); selected={...p}; renderGo();
+    };
+  };
+  draw(routeCache[key2(origin(g),D)], routeCache[key2(D,back(g))]);
+  const [rg,rb]=await Promise.all([footRoute(origin(g),D),footRoute(D,back(g))]);
+  if(token!==renderToken) return;
+  draw(rg,rb);
+  if(map && rg) L.polyline(rg.line,{color:css('--accent'),weight:4}).addTo(lay);
+  else if(map) L.polyline([origin(g),D],{color:css('--accent'),weight:3,dashArray:'4 8'}).addTo(lay);
+  const fk = D.join(',');
+  if(map && lastFit!==fk){ lastFit=fk; map.fitBounds(L.latLngBounds([origin(g),D,back(g)]),{padding:[50,50],maxZoom:17}); }
+  if(map) L.circleMarker(D,{radius:8,color:css('--accent'),fillColor:'#fff',fillOpacity:1,weight:3}).bindTooltip(dest.name,{permanent:true,direction:'right',className:'lbl'}).addTo(lay);
+}
+document.getElementById('stay').onchange=e=>{ stayMin=Math.max(0,Math.min(120,Number(e.target.value)||0)); renderGo(); };
+
+// 가게 검색: Nominatim (키 없음), 캠퍼스 주변으로 범위 제한
+async function search(){
+  const q=document.getElementById('q').value.trim(), ul=document.getElementById('results'); if(!q) return;
+  ul.hidden=false; ul.innerHTML='<li><button disabled>찾는 중…</button></li>';
+  try{
+    const res=await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&accept-language=ko&bounded=1&viewbox=127.20,37.03,127.29,36.98&q=${encodeURIComponent(q)}`);
+    const arr=await res.json();
+    if(!arr.length){ ul.innerHTML='<li><button disabled>못 찾았어요. 작은 가게는 지도에 없을 수 있으니 지도에서 직접 눌러주세요.</button></li>'; return; }
+    ul.innerHTML=arr.map((r,i)=>`<li><button data-i="${i}">${esc(r.name||r.display_name.split(',')[0])}<br><small>${esc(r.display_name)}</small></button></li>`).join('');
+    ul.querySelectorAll('button').forEach(b=>b.onclick=()=>{ const r=arr[Number(b.dataset.i)]; pick(r.name||r.display_name.split(',')[0],Number(r.lat),Number(r.lon)); ul.hidden=true; renderGo(); });
+  }catch(e){ ul.innerHTML='<li><button disabled>검색 서버에 연결하지 못했어요. 지도에서 직접 눌러주세요.</button></li>'; }
+}
+document.getElementById('qBtn').onclick=search;
+document.getElementById('q').onkeydown=e=>{ if(e.key==='Enter') search(); };
+
+/* ---------- 화면: 저장한 곳 ---------- */
+function renderPlaces(){
+  const el=document.getElementById('placeEdit');
+  el.innerHTML='<h2>저장한 곳</h2>'+places.map(p=>`<div class="pl" data-id="${p.id}">
+    <div class="ctrl" style="margin:0;justify-content:space-between"><b style="color:var(--ink)">${esc(p.name)}</b><button class="btn ghost sm" data-del="${p.id}">삭제</button></div>
+    <div class="grid">
+      <div><label>머물 시간 (분)</label><input type="number" min="0" max="120" data-k="need" value="${p.need??''}"></div>
+      <div><label>직접 잰 편도 도보 (분)</label><input type="number" min="0" max="120" data-k="measured" value="${p.measured??''}" placeholder="지도 추정 사용"></div>
+      <div><label>영업 시작</label><input type="time" data-k="open" value="${p.open}"></div>
+      <div><label>영업 끝</label><input type="time" data-k="close" value="${p.close}"></div>
+      <div><label>브레이크 시작</label><input type="time" data-k="brStart" value="${p.brStart}"></div>
+      <div><label>브레이크 끝</label><input type="time" data-k="brEnd" value="${p.brEnd}"></div>
+    </div></div>`).join('')+`<div class="ctrl" style="margin-top:12px"><button class="btn ghost sm" id="resetPlaces">예시 장소로 되돌리기</button></div>`;
+  el.querySelectorAll('input[data-k]').forEach(inp=>inp.onchange=()=>{
+    const p=places.find(x=>x.id===inp.closest('.pl').dataset.id), k=inp.dataset.k;
+    if(k==='need'||k==='measured') p[k]= inp.value==='' ? (k==='need'?0:null) : Math.max(0,Number(inp.value)); else p[k]=inp.value;
+    write(KEY,places);
+  });
+  el.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{ places=places.filter(p=>p.id!==b.dataset.del); write(KEY,places); if(selected&&selected.id===b.dataset.del) selected=null; renderPlaces(); });
+  document.getElementById('resetPlaces').onclick=()=>{ places=structuredClone(SAMPLE_PLACES); write(KEY,places); renderPlaces(); };
+}
+
+/* ---------- 화면: 시간표 ---------- */
+const COLORS=['#6A9BCB','#5FB3B0','#D1E15A','#F2D46A','#86CFEA','#EA8B6E','#F7BC1E'];
+function renderTT(){
+  const st=9*60,en=18*60,span=en-st,names=[...new Set(CLASSES.map(c=>c.name))];
+  let h='<div class="wk-head"></div>'+DAYS.map((d,i)=>`<div class="wk-head${isWeekday&&i===todayIdx?' today':''}">${d}</div>`).join('')+'<div class="wk-times">';
+  for(let t=st;t<en;t+=60) h+=`<span style="top:${(t-st)/span*100}%">${t/60}</span>`;
+  h+='</div>';
+  DAYS.forEach((d,i)=>{ h+='<div class="wk-col">'; CLASSES.filter(c=>c.day===i).forEach(c=>{ h+=`<div class="wk-b" style="top:${(toMin(c.start)-st)/span*100}%;height:${(toMin(c.end)-toMin(c.start))/span*100}%;background:${COLORS[names.indexOf(c.name)%COLORS.length]}"><b>${esc(c.name)}</b><span>${esc(c.building)} ${c.room}호</span></div>`; }); h+='</div>'; });
+  document.getElementById('week').innerHTML=h;
+}
+
+/* ---------- 탭 ---------- */
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('nav button').forEach(x=>x.setAttribute('aria-selected',x===b));
+  ['go','places','tt'].forEach(id=>document.getElementById(id).hidden=id!==b.dataset.tab);
+  if(b.dataset.tab==='go'){ renderGo(); if(map) setTimeout(()=>map.invalidateSize(),0); }
+  else if(b.dataset.tab==='places') renderPlaces(); else renderTT();
+});
+if(!gapsOf(day).length){ const d=[0,1].find(i=>gapsOf(i).length); if(d!==undefined && !isWeekday) day=d; }
+renderGo();
+setInterval(()=>{ if(!document.getElementById('go').hidden) { const g=currentGap(); if(g&&g.live) renderGo(); } }, 60000);
+</script>
+</body>
+</html>
