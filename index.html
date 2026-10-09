@@ -726,7 +726,7 @@
   // 도보 거리를 어디서 가져왔는지 보여주는 라벨
   function legLabel(leg) {
     if (leg.src === "direct") return "직접 잰 값";
-    if (leg.src === "route") return "길 따라 " + fmtM(leg.routeM) + "m (직선 추정이면 약 " + fmtM(leg.straightM) + "m)";
+    if (leg.src === "route") return "길 따라 " + fmtM(leg.routeM) + "m (직선 추정이면 약 " + fmtM(leg.straightM * DETOUR) + "m)";
     if (leg.src === "anomaly") return "직선 추정 (길 데이터 이상: 길 찾기 " + fmtM(leg.routeM) + "m)";
     return "직선 추정" + (leg.state === "pending" ? " (길 찾는 중)" : leg.state === "failed" ? " (길 찾기 실패)" : "");
   }
