@@ -5,6 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light">
 <title>공강 판정</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"
+  integrity="sha512-h9FcoyWjHcOcmEVkxOfTLnmZFWIH0iZhZT1H2TbOq55xssQGEJHEaIm+PgoUaZbRvQTNTluNOEfb1ZRy6D3BOw=="
+  crossorigin="" onerror="window.leafletCssFailed = true">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"
+  integrity="sha512-puJW3E/qXDqYp9IfhAI54BJEaWIfloJ7JWs7OeD5i6ruC9JZL1gERT1wjtwXFlh7CjE7ZJ+/vcRZRkIYIb6p4g=="
+  crossorigin=""></script>
 <style>
   :root { color-scheme: light; }
   * { box-sizing: border-box; }
@@ -100,6 +106,19 @@
   .card .now { font-size: 14px; font-weight: 700; color: #0a5c2e; }
   .elev { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 12px; }
   .elev-label { font-weight: 600; }
+  .stay-field { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .stay-field label { font-weight: 600; }
+  .stay-field input { width: 90px; margin-top: 0; }
+  .stay-msg { color: #b00020; font-weight: 600; font-size: 14px; }
+  .map { height: 380px; border: 1px solid #767676; border-radius: 6px; }
+  .legend { list-style: none; display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 6px 0 0; padding: 0; font-size: 14px; }
+  .sw { display: inline-block; width: 12px; height: 12px; border: 1px solid #1a1a1a; border-radius: 50%; vertical-align: -1px; }
+  .sw-ok { background: #1b8a3a; }
+  .sw-maybe { background: #f2b705; }
+  .sw-short { background: #8a8a8a; }
+  #gg-map-wrap { margin-bottom: 12px; }
+  #gg-picked { margin-bottom: 16px; }
+  #gg-picked h3 { margin: 0 0 6px; font-size: 16px; }
   .summary { margin: 0 0 4px; font-weight: 600; }
   .note { margin: 0 0 12px; font-size: 14px; color: #444444; }
   .place-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
@@ -139,6 +158,21 @@
     <div id="gg-days" class="days" role="group" aria-label="요일 선택"></div>
     <div id="gg-cards" class="cards"></div>
     <div id="gg-elev" class="elev" role="group" aria-label="엘리베이터 혼잡도"></div>
+    <div id="gg-stay" class="stay-field" hidden>
+      <label for="gg-stay-input">머물 시간 (분)</label>
+      <input id="gg-stay-input" type="number" min="1" max="180" step="1" value="25" inputmode="numeric">
+      <span id="gg-stay-msg" class="stay-msg" role="status"></span>
+    </div>
+    <div id="gg-map-wrap" hidden>
+      <div id="gg-map" class="map"></div>
+      <ul id="gg-legend" class="legend">
+        <li><span class="sw sw-ok"></span> 가능</li>
+        <li><span class="sw sw-maybe"></span> 시간은 되지만 문 닫았을 수 있음</li>
+        <li><span class="sw sw-short"></span> 부족</li>
+      </ul>
+      <p id="gg-map-note" class="note"></p>
+    </div>
+    <div id="gg-picked" hidden></div>
     <div id="gg-result"></div>
   </section>
 
@@ -295,6 +329,15 @@
       arrival: arrival,
       maybeClosed: maybeClosed(place, arrival)
     };
+  }
+
+  // 갈 수 있는 범위 원 반지름(m). 0 이하면 갈 수 있는 범위 없음
+  function rangeRadiusM(gap, startMin, stayMin, elevatorMin) {
+    var remaining = gap.end - startMin;
+    var floors = floorMoveMin(floorOf(gap.prev.room), elevatorMin) +
+                 floorMoveMin(floorOf(gap.next.room), elevatorMin);
+    var spare = remaining - floors - stayMin - MARGIN_MIN - 2 * ENTRY_MIN;
+    return (spare / 2) * WALK_M_PER_MIN / DETOUR;
   }
   /* CALC-END */
 
@@ -501,6 +544,163 @@
   var ggDay = todayIndex() >= 0 ? DAYS[todayIndex()] : DAYS[0];
   var ggGap = 0;
   var ggQuiet = false;   // 엘리베이터 한산 여부. 기본값은 붐빔
+  var ggStay = 25;       // 머물 시간 입력값(분). 범위 원과 지도에서 고른 곳 판정에 씀
+  var ggCtx = null;      // 지금 선택된 공강의 계산 기준 { g, startMin, elevatorMin }. 공강이 없으면 null
+  var ggPicked = null;   // { type: "saved", id } 또는 { type: "custom", lat, lng }
+
+  var STAY_MIN = 1, STAY_MAX = 180;
+  var DOT_COLORS = { ok: "#1b8a3a", maybe: "#f2b705", short: "#8a8a8a" };
+
+  function statusOf(r) {
+    if (!r.ok) return { cls: "short", text: r.shortage + "분 부족" };
+    if (r.maybeClosed) return { cls: "maybe", text: "시간은 되지만 문 닫았을 수 있음" };
+    return { cls: "ok", text: "가능" };
+  }
+
+  // 판정 한 줄(목록과 고른 곳 판정에서 같이 씀). extra: 덧붙일 설명 한 줄(선택)
+  function buildRow(p, r, extra) {
+    var li = el("li", "place-row");
+    var top = el("div", "place-top");
+    top.appendChild(el("span", "place-name", p.name));
+    var st = statusOf(r);
+    top.appendChild(el("span", "badge " + st.cls, st.text));
+    li.appendChild(top);
+
+    li.appendChild(el("p", "place-detail", r.ok
+      ? "머물 수 있는 시간 " + r.stay + "분 · 늦어도 " + fmt(r.leaveAt) + "에 출발"
+      : "늦어도 출발 시각 —"));
+    li.appendChild(el("p", "place-detail",
+      "가는 시간 " + r.go + "분 · 돌아오는 시간 " + r.back + "분 · 필요한 머물 시간 " + p.stay + "분"));
+    if (p.open !== null) {
+      li.appendChild(el("p", "place-detail",
+        "영업 " + p.open + "–" + p.close + " · 도착 예정 " + fmt(r.arrival)));
+    }
+    if (extra) li.appendChild(el("p", "place-detail", extra));
+    return li;
+  }
+
+  // ---------- 지도 (Leaflet을 못 불러오면 지도만 빠지고 판정은 계속 동작) ----------
+  var map = null, overlay = null, mapBroken = false;
+
+  function ensureMap() {
+    if (mapBroken) return false;
+    if (map) return true;
+    if (typeof L === "undefined" || window.leafletCssFailed) { mapBroken = true; return false; }
+    try {
+      var c = BUILDING_COORDS["원형관"];
+      map = L.map("gg-map").setView([c.lat, c.lng], 15);
+      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors"
+      }).addTo(map);
+      overlay = L.layerGroup().addTo(map);
+      map.on("click", function (e) {
+        if (!ggCtx) return;
+        ggPicked = { type: "custom", lat: e.latlng.lat, lng: e.latlng.lng };
+        refreshPicked();
+      });
+      return true;
+    } catch (e) {
+      map = null; overlay = null; mapBroken = true;
+      return false;
+    }
+  }
+
+  function pickedPlace() {
+    if (!ggPicked) return null;
+    if (ggPicked.type === "saved") {
+      for (var i = 0; i < places.length; i++) if (places[i].id === ggPicked.id) return places[i];
+      return null;
+    }
+    return { id: "custom", name: "지도에서 고른 곳", lat: ggPicked.lat, lng: ggPicked.lng,
+             stay: ggStay, open: null, close: null, breakStart: null, breakEnd: null, walk: null };
+  }
+
+  function drawOverlay() {
+    overlay.clearLayers();
+    var note = document.getElementById("gg-map-note");
+    if (!ggCtx) return;
+    var g = ggCtx.g;
+
+    var center = BUILDING_COORDS[g.prev.building];
+    var radius = rangeRadiusM(g, ggCtx.startMin, ggStay, ggCtx.elevatorMin);
+    if (radius > 0) {
+      L.circle([center.lat, center.lng], {
+        radius: radius, color: "#1d4ed8", weight: 2,
+        fillColor: "#1d4ed8", fillOpacity: 0.08, interactive: false
+      }).addTo(overlay);
+      note.textContent = "파란 원: 직선 기준 대략적인 갈 수 있는 범위입니다. 중심은 앞 수업 건물(" +
+        g.prev.building + "), 반지름 약 " + Math.round(radius) + "m (머물 시간 " + ggStay + "분 기준)";
+    } else {
+      note.textContent = "이 공강에서는 머물 시간 " + ggStay + "분을 채우며 갈 수 있는 범위가 없습니다 (직선 기준 대략적인 추정).";
+    }
+
+    function dot(p, isPicked, isCustom) {
+      var r = judge(ggCtx.g, ggCtx.startMin, p, ggCtx.elevatorMin);
+      var st = statusOf(r);
+      var m = L.circleMarker([p.lat, p.lng], {
+        radius: isCustom ? 10 : 8,
+        color: "#1a1a1a", weight: isPicked ? 4 : 1.5,
+        fillColor: DOT_COLORS[st.cls], fillOpacity: 0.95,
+        bubblingMouseEvents: false
+      }).addTo(overlay);
+      m.bindTooltip(p.name + " · " + (st.cls === "maybe" ? "⚠ " : "") + st.text);
+      return m;
+    }
+    var sel = ggPicked && ggPicked.type === "saved" ? ggPicked.id : null;
+    places.forEach(function (p) {
+      dot(p, p.id === sel, false).on("click", function () {
+        ggPicked = { type: "saved", id: p.id };
+        refreshPicked();
+      });
+    });
+    if (ggPicked && ggPicked.type === "custom") {
+      dot(pickedPlace(), true, true).on("click", function () { /* 같은 곳을 다시 눌러도 그대로 */ });
+    }
+  }
+
+  function renderPicked() {
+    var box = document.getElementById("gg-picked");
+    box.textContent = "";
+    box.hidden = !ggCtx || !map;
+    if (box.hidden) return;
+    box.appendChild(el("h3", "", "고른 곳 판정"));
+    var p = pickedPlace();
+    if (!p) {
+      box.appendChild(el("p", "empty", "지도의 빈 곳이나 저장한 곳 점을 누르면 여기에 판정이 나옵니다."));
+      return;
+    }
+    var r = judge(ggCtx.g, ggCtx.startMin, p, ggCtx.elevatorMin);
+    var ul = el("ul", "place-list");
+    var extra = ggPicked.type === "custom"
+      ? "위치 " + p.lat.toFixed(5) + ", " + p.lng.toFixed(5) + " · 머물 시간은 입력값(" + ggStay + "분)을 씁니다"
+      : "";
+    ul.appendChild(buildRow(p, r, extra));
+    box.appendChild(ul);
+  }
+
+  function refreshPicked() {
+    if (!map) return;
+    drawOverlay();
+    renderPicked();
+  }
+
+  var stayInput = document.getElementById("gg-stay-input");
+  var stayMsg = document.getElementById("gg-stay-msg");
+  stayInput.addEventListener("input", function () {
+    var v = stayInput.value.trim() === "" ? NaN : Number(stayInput.value);
+    if (Number.isInteger(v) && v >= STAY_MIN && v <= STAY_MAX) {
+      ggStay = v;
+      stayMsg.textContent = "";
+      refreshPicked();
+    } else {
+      stayMsg.textContent = "머물 시간은 " + STAY_MIN + "~" + STAY_MAX + "분 정수로 입력하세요 (지금은 " + ggStay + "분 적용 중)";
+    }
+  });
+  stayInput.addEventListener("change", function () {
+    var v = stayInput.value.trim() === "" ? NaN : Number(stayInput.value);
+    if (!(Number.isInteger(v) && v >= STAY_MIN && v <= STAY_MAX)) stayInput.value = ggStay;
+  });
 
   function classLabel(c) {
     return c.name + " (" + c.building + " " + c.room + "호, " + floorOf(c.room) + "층)";
@@ -535,7 +735,17 @@
     resultEl.textContent = "";
     elevEl.textContent = "";
 
+    var stayEl = document.getElementById("gg-stay");
+    var mapWrap = document.getElementById("gg-map-wrap");
+    var mapEl = document.getElementById("gg-map");
+    var legendEl = document.getElementById("gg-legend");
+    var pickedEl = document.getElementById("gg-picked");
+
     if (gaps.length === 0) {
+      ggCtx = null;
+      stayEl.hidden = true;
+      mapWrap.hidden = true;
+      pickedEl.hidden = true;
       cardsEl.appendChild(el("p", "empty", ggDay + "요일은 공강이 없습니다."));
       return;
     }
@@ -575,29 +785,25 @@
       .sort(function (a, b) { return b.r.stay - a.r.stay; });
 
     var ul = el("ul", "place-list");
-    rows.forEach(function (row) {
-      var p = row.p, r = row.r;
-      var li = el("li", "place-row");
-
-      var top = el("div", "place-top");
-      top.appendChild(el("span", "place-name", p.name));
-      if (!r.ok) top.appendChild(el("span", "badge short", r.shortage + "분 부족"));
-      else if (r.maybeClosed) top.appendChild(el("span", "badge maybe", "시간은 되지만 문 닫았을 수 있음"));
-      else top.appendChild(el("span", "badge ok", "가능"));
-      li.appendChild(top);
-
-      li.appendChild(el("p", "place-detail", r.ok
-        ? "머물 수 있는 시간 " + r.stay + "분 · 늦어도 " + fmt(r.leaveAt) + "에 출발"
-        : "늦어도 출발 시각 —"));
-      var detail = "가는 시간 " + r.go + "분 · 돌아오는 시간 " + r.back + "분 · 필요한 머물 시간 " + p.stay + "분";
-      li.appendChild(el("p", "place-detail", detail));
-      if (p.open !== null) {
-        li.appendChild(el("p", "place-detail",
-          "영업 " + p.open + "–" + p.close + " · 도착 예정 " + fmt(r.arrival)));
-      }
-      ul.appendChild(li);
-    });
+    rows.forEach(function (row) { ul.appendChild(buildRow(row.p, row.r)); });
     resultEl.appendChild(ul);
+
+    // 지도 영역: Leaflet을 못 불러오면 지도·머물 시간 입력칸·고른 곳 판정만 숨기고 위 목록은 그대로 둠
+    ggCtx = { g: g, startMin: startMin, elevatorMin: elevatorMin };
+    mapWrap.hidden = false;
+    mapEl.hidden = false;
+    var mapOk = ensureMap();
+    stayEl.hidden = !mapOk;
+    mapEl.hidden = !mapOk;
+    legendEl.hidden = !mapOk;
+    if (mapOk) {
+      map.invalidateSize({ pan: false });
+      refreshPicked();
+    } else {
+      document.getElementById("gg-map-note").textContent =
+        "지도를 불러오지 못했습니다. 판정 목록은 그대로 쓸 수 있습니다.";
+      pickedEl.hidden = true;
+    }
   }
 
   // ---------- 추가·삭제 ----------
