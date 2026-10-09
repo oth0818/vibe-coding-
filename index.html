@@ -110,6 +110,26 @@
   .stay-field label { font-weight: 600; }
   .stay-field input { width: 90px; margin-top: 0; }
   .stay-msg { color: #b00020; font-weight: 600; font-size: 14px; }
+  /* 저장한 곳 화면 */
+  .pl-list { display: grid; gap: 8px; margin-bottom: 16px; }
+  .pl-card { padding: 10px 12px; border: 1px solid #c8c8c8; border-radius: 6px; }
+  .pl-name { font-weight: 700; }
+  .pl-sub { margin: 2px 0 0; font-size: 14px; color: #333333; }
+  .pl-pos { margin: 2px 0 0; font-size: 13px; color: #444444; }
+  .pl-actions { display: flex; gap: 8px; margin-top: 8px; }
+  .btn-sm {
+    padding: 4px 14px; border: 1px solid #1d4ed8; border-radius: 4px;
+    background: #ffffff; color: #1d4ed8; font: inherit; font-weight: 700; cursor: pointer;
+  }
+  .btn-sm.danger { border-color: #b00020; color: #b00020; }
+  .btn-sm.primary { background: #1d4ed8; color: #ffffff; }
+  .reset-btn {
+    padding: 6px 16px; border: 1px solid #b00020; border-radius: 4px;
+    background: #ffffff; color: #b00020; font: inherit; font-weight: 700; cursor: pointer;
+  }
+  .pl-card form { margin-top: 8px; }
+  .field-wide { grid-column: 1 / -1; }
+  .field-help { margin: 4px 0 0; font-size: 13px; font-weight: 400; color: #444444; }
   .search { margin-bottom: 12px; }
   .search form { margin: 0; padding: 0; border: none; border-radius: 0; }
   .search label { display: block; margin-bottom: 2px; }
@@ -211,7 +231,9 @@
 
   <section id="screen-places" role="tabpanel" aria-labelledby="tab-places" hidden>
     <h2>저장한 곳</h2>
-    <p class="empty">아직 비어 있음</p>
+    <p id="pl-warn" class="storage-warn" hidden></p>
+    <div id="pl-list"></div>
+    <button id="pl-reset" class="reset-btn" type="button">기본 장소로 되돌리기</button>
   </section>
 
   <section id="screen-timetable" role="tabpanel" aria-labelledby="tab-timetable" hidden>
@@ -640,6 +662,63 @@
   }
   /* SEARCH-END */
 
+  /* PLACEEDIT-START */
+  // ---------- 저장한 곳 수정 폼 검사 ----------
+  var PLACE_STAY_MIN = 1, PLACE_STAY_MAX = 180;
+  var PLACE_WALK_MAX = 120;
+
+  function readHM(x) {   // x: { h, m } 문자열
+    if (x.h === "" && x.m === "") return { blank: true };
+    if (x.h === "" || x.m === "") return { partial: true };
+    return { t: x.h + ":" + x.m };
+  }
+
+  // 시작·끝 한 쌍을 읽음. 반환: { start, end } 또는 { error }
+  function readTimePair(label, s, e) {
+    var a = readHM(s), b = readHM(e);
+    if (a.partial || b.partial) return { error: label + "은 시와 분을 모두 고르세요." };
+    if (a.blank && b.blank) return { start: null, end: null };
+    if (a.blank || b.blank) return { error: label + "은 시작과 끝을 함께 입력하세요." };
+    if (toMin(b.t) <= toMin(a.t)) return { error: label + " 끝은 시작보다 늦어야 합니다." };
+    return { start: a.t, end: b.t };
+  }
+
+  // v: { name, stay, walk, open: {h,m}, close: {h,m}, breakStart: {h,m}, breakEnd: {h,m} } (모두 문자열)
+  // 반환: { place } 또는 { error }. 좌표와 id는 original 그대로
+  function parsePlaceForm(v, original) {
+    var name = String(v.name).trim();
+    if (name === "") return { error: "이름을 입력하세요." };
+    if (name.length > PLACE_NAME_MAX) return { error: "이름은 " + PLACE_NAME_MAX + "자 이하로 입력하세요 (지금 " + name.length + "자)." };
+
+    var stayStr = String(v.stay).trim();
+    var stay = /^\d+$/.test(stayStr) ? Number(stayStr) : NaN;
+    if (!(stay >= PLACE_STAY_MIN && stay <= PLACE_STAY_MAX)) {
+      return { error: "머물 시간은 " + PLACE_STAY_MIN + "~" + PLACE_STAY_MAX + "분 정수로 입력하세요." };
+    }
+
+    var walkStr = String(v.walk).trim();
+    var walk = null;
+    if (walkStr !== "") {
+      walk = /^\d+$/.test(walkStr) ? Number(walkStr) : NaN;
+      if (!(walk >= 0 && walk <= PLACE_WALK_MAX)) {
+        return { error: "직접 잰 편도 도보 시간은 0~" + PLACE_WALK_MAX + "분 정수로 입력하거나 비워 두세요." };
+      }
+    }
+
+    var hours = readTimePair("영업시간", v.open, v.close);
+    if (hours.error) return { error: hours.error };
+    var brk = readTimePair("브레이크타임", v.breakStart, v.breakEnd);
+    if (brk.error) return { error: brk.error };
+
+    return {
+      place: {
+        id: original.id, name: name, lat: original.lat, lng: original.lng, stay: stay,
+        open: hours.start, close: hours.end, breakStart: brk.start, breakEnd: brk.end, walk: walk
+      }
+    };
+  }
+  /* PLACEEDIT-END */
+
   function isValidClass(c) {
     return c && typeof c === "object" &&
       typeof c.id === "string" &&
@@ -697,6 +776,7 @@
       document.getElementById("screen-" + t.getAttribute("data-screen")).hidden = !on;
     });
     if (name === "gonggang") renderGonggang();   // 지금 모드가 현재 시각을 따르도록
+    if (name === "places") renderPlaces();       // 공강 화면에서 저장한 내용도 보이도록
   }
   Array.prototype.forEach.call(tabs, function (t) {
     t.addEventListener("click", function () { showScreen(t.getAttribute("data-screen")); });
@@ -1056,7 +1136,7 @@
     ggPicked = { type: "saved", id: p.id };
     ggSaveMsg = saved ? "'" + name + "'을(를) 저장했습니다. 저장한 곳 목록과 지도에 추가됐습니다." : "";
     ggSaveMsgError = false;
-    renderGonggang();   // 목록, 지도 점, 고른 곳 판정을 새로 그림
+    renderAllPlaces();   // 저장한 곳 화면, 목록, 지도 점, 고른 곳 판정을 새로 그림
   }
 
   // ---------- 가게 검색 화면 ----------
@@ -1124,7 +1204,7 @@
   function refreshPicked() {
     if (!map) return;
     var pk = pickedPlace();
-    if (pk && ggCtx) {   // 고른 곳의 길은 대기열 맨 앞으로
+    if (pk && ggCtx && !hasDirectWalk(pk)) {   // 고른 곳의 길은 대기열 맨 앞으로 (직접 잰 값이 있으면 요청 안 함)
       requestRoute(ggCtx.g.prev.building, pk, true);
       if (ggCtx.g.next.building !== ggCtx.g.prev.building) requestRoute(ggCtx.g.next.building, pk, true);
     }
@@ -1228,6 +1308,7 @@
     // 길 찾기 요청(이미 받았거나 요청 중인 쌍은 건너뜀). 판정은 먼저 직선 추정으로 보여주고 결과가 오면 다시 그림
     var routePairs = [];
     places.forEach(function (p) {
+      if (hasDirectWalk(p)) return;   // 직접 잰 값이 있는 장소는 길 찾기 요청을 보내지 않음
       routePairs.push({ building: g.prev.building, place: p });
       if (g.next.building !== g.prev.building) routePairs.push({ building: g.next.building, place: p });
     });
@@ -1240,17 +1321,24 @@
     resultEl.appendChild(el("p", "note",
       "도보 거리는 길 찾기 결과를 쓰고, 길 찾기가 안 되면 직선거리 × 1.3으로 추정합니다. 엘리베이터는 " +
       (ggQuiet ? "한산(" + ELEVATOR_QUIET_MIN : "붐빔(" + ELEVATOR_BUSY_MIN) + "분) 기준입니다. 머물 수 있는 시간이 긴 순으로 정렬했습니다."));
-    resultEl.appendChild(el("p", "note",
-      prog.done < prog.total ? "길 찾는 중 (" + prog.done + "/" + prog.total + ") — 그동안은 직선 추정으로 보여줍니다."
-      : prog.failed > 0 ? "일부(" + prog.failed + "건)는 길 찾기에 실패해 직선 추정을 씁니다."
-      : "길 찾기 완료"));
+    if (prog.total > 0) {
+      resultEl.appendChild(el("p", "note",
+        prog.done < prog.total ? "길 찾는 중 (" + prog.done + "/" + prog.total + ") — 그동안은 직선 추정으로 보여줍니다."
+        : prog.failed > 0 ? "일부(" + prog.failed + "건)는 길 찾기에 실패해 직선 추정을 씁니다."
+        : "길 찾기 완료"));
+    }
 
-    var rows = places.map(function (p) { return { p: p, r: judge(g, startMin, p, elevatorMin, routeOf) }; })
-      .sort(function (a, b) { return b.r.stay - a.r.stay; });
+    if (places.length === 0) {
+      resultEl.appendChild(el("p", "empty",
+        "저장한 곳이 없습니다. 지도에서 고르거나 검색해 저장하거나, 저장한 곳 탭에서 기본 장소로 되돌리세요."));
+    } else {
+      var rows = places.map(function (p) { return { p: p, r: judge(g, startMin, p, elevatorMin, routeOf) }; })
+        .sort(function (a, b) { return b.r.stay - a.r.stay; });
 
-    var ul = el("ul", "place-list");
-    rows.forEach(function (row) { ul.appendChild(buildRow(row.p, row.r)); });
-    resultEl.appendChild(ul);
+      var ul = el("ul", "place-list");
+      rows.forEach(function (row) { ul.appendChild(buildRow(row.p, row.r)); });
+      resultEl.appendChild(ul);
+    }
 
     // 지도 영역: Leaflet을 못 불러오면 지도·머물 시간 입력칸·고른 곳 판정만 숨기고 위 목록은 그대로 둠
     ggCtx = { g: g, startMin: startMin, elevatorMin: elevatorMin };
@@ -1269,6 +1357,175 @@
         "지도를 불러오지 못했습니다. 판정 목록은 그대로 쓸 수 있습니다.";
       pickedEl.hidden = true;
     }
+  }
+
+  // ---------- 저장한 곳 화면 (수정·삭제·기본 장소로 되돌리기) ----------
+  var plEditing = null;   // 수정 중인 장소 id (한 번에 한 곳)
+  var plListEl = document.getElementById("pl-list");
+  plListEl.className = "pl-list";
+
+  function hasDirectWalk(p) { return p.walk !== null && p.walk !== undefined; }
+
+  function fmtRange(a, b) { return a === null ? "—" : a + "–" + b; }
+
+  function placeSummary(p) {
+    return "머물 " + p.stay + "분 · 영업 " + fmtRange(p.open, p.close) + " · 브레이크 " + fmtRange(p.breakStart, p.breakEnd) +
+      " · 직접 잰 도보 " + (hasDirectWalk(p) ? p.walk + "분" : "—");
+  }
+
+  // 시·분 드롭다운 한 쌍. hm: "HH:MM" 또는 null
+  function timeField(legend, hm) {
+    var wrap = el("div", "time-field");
+    wrap.setAttribute("role", "group");
+    wrap.appendChild(el("span", "time-label", legend));
+    var row = el("div", "time-selects");
+    var h = document.createElement("select"), m = document.createElement("select");
+    h.setAttribute("aria-label", legend + " 시");
+    m.setAttribute("aria-label", legend + " 분");
+    fillTimeSelect(h, "시", 0, 23, 1);
+    fillTimeSelect(m, "분", 0, 55, 5);
+    if (hm) {
+      var parts = hm.split(":");
+      h.value = parts[0];
+      if (!m.querySelector("option[value=\"" + parts[1] + "\"]")) {   // 5분 단위가 아닌 값도 그대로 보이게
+        var extra = document.createElement("option");
+        extra.value = parts[1];
+        extra.textContent = parts[1];
+        m.appendChild(extra);
+      }
+      m.value = parts[1];
+    }
+    row.appendChild(h);
+    row.appendChild(el("span", "", ":"));
+    row.appendChild(m);
+    wrap.appendChild(row);
+    return { el: wrap, get: function () { return { h: h.value, m: m.value }; } };
+  }
+
+  function labeled(text, input) {
+    var l = el("label", "", text);
+    l.appendChild(input);
+    return l;
+  }
+
+  function buildEditForm(p) {
+    var form = document.createElement("form");
+    form.noValidate = true;
+    var fields = el("div", "fields");
+
+    var nameIn = document.createElement("input");
+    nameIn.type = "text"; nameIn.value = p.name; nameIn.autocomplete = "off";
+    fields.appendChild(labeled("이름", nameIn));
+
+    var stayIn = document.createElement("input");
+    stayIn.type = "number"; stayIn.min = String(PLACE_STAY_MIN); stayIn.max = String(PLACE_STAY_MAX); stayIn.step = "1";
+    stayIn.value = String(p.stay);
+    fields.appendChild(labeled("머물 시간 (분)", stayIn));
+
+    var walkIn = document.createElement("input");
+    walkIn.type = "number"; walkIn.min = "0"; walkIn.max = String(PLACE_WALK_MAX); walkIn.step = "1";
+    walkIn.value = hasDirectWalk(p) ? String(p.walk) : "";
+    var walkBox = el("div", "field-wide");
+    walkBox.appendChild(labeled("직접 잰 편도 도보 시간 (분, 비우면 길 찾기 사용)", walkIn));
+    walkBox.appendChild(el("p", "field-help", "원형관 1층 출입구에서 가게 문까지 걸어서 걸린 분 (엘리베이터 제외)"));
+    fields.appendChild(walkBox);
+
+    var fOpen = timeField("영업 시작", p.open), fClose = timeField("영업 끝", p.close);
+    var fBs = timeField("브레이크 시작", p.breakStart), fBe = timeField("브레이크 끝", p.breakEnd);
+    [fOpen, fClose, fBs, fBe].forEach(function (f) { fields.appendChild(f.el); });
+    form.appendChild(fields);
+
+    var msg = el("p", "msg error", "");
+    msg.setAttribute("role", "status");
+
+    var actions = el("div", "pl-actions");
+    var saveBtn = el("button", "btn-sm primary", "저장");
+    saveBtn.type = "submit";
+    var cancelBtn = el("button", "btn-sm", "취소");
+    cancelBtn.type = "button";
+    cancelBtn.addEventListener("click", function () { plEditing = null; renderPlaces(); });
+    actions.appendChild(saveBtn);
+    actions.appendChild(cancelBtn);
+    form.appendChild(actions);
+    form.appendChild(msg);
+
+    form.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var res = parsePlaceForm({
+        name: nameIn.value, stay: stayIn.value, walk: walkIn.value,
+        open: fOpen.get(), close: fClose.get(), breakStart: fBs.get(), breakEnd: fBe.get()
+      }, p);
+      if (res.error) { msg.textContent = res.error; return; }
+      if (!isValidPlace(res.place)) { msg.textContent = "입력값을 저장할 수 없습니다. 다시 확인하세요."; return; }
+      var idx = places.indexOf(p);
+      if (idx === -1) { plEditing = null; renderAllPlaces(); return; }
+      places[idx] = res.place;
+      plEditing = null;
+      savePlaces();
+      renderAllPlaces();
+    });
+    return form;
+  }
+
+  function deletePlace(p) {
+    if (!confirm("\"" + p.name + "\"을(를) 지울까요?")) return;
+    places = places.filter(function (x) { return x !== p; });
+    if (plEditing === p.id) plEditing = null;
+    if (ggPicked && ggPicked.type === "saved" && ggPicked.id === p.id) { ggPicked = null; ggSaveMsg = ""; }
+    savePlaces();
+    renderAllPlaces();
+  }
+
+  function renderPlaces() {
+    var warn = document.getElementById("pl-warn");
+    warn.textContent = placesWarning;
+    warn.hidden = placesWarning === "";
+    plListEl.textContent = "";
+    if (places.length === 0) {
+      plListEl.appendChild(el("p", "empty", "저장한 곳이 없습니다. 공강 화면에서 지도로 고르거나 검색해 저장하거나, 아래 버튼으로 기본 장소를 되돌릴 수 있습니다."));
+      return;
+    }
+    places.forEach(function (p) {
+      var card = el("div", "pl-card");
+      card.appendChild(el("div", "pl-name", p.name));
+      card.appendChild(el("p", "pl-pos", "위치 " + p.lat.toFixed(5) + ", " + p.lng.toFixed(5)));
+      if (plEditing === p.id) {
+        card.appendChild(buildEditForm(p));
+      } else {
+        card.appendChild(el("p", "pl-sub", placeSummary(p)));
+        var actions = el("div", "pl-actions");
+        var edit = el("button", "btn-sm", "수정");
+        edit.type = "button";
+        edit.setAttribute("aria-label", p.name + " 수정");
+        edit.addEventListener("click", function () { plEditing = p.id; renderPlaces(); });
+        var del = el("button", "btn-sm danger", "삭제");
+        del.type = "button";
+        del.setAttribute("aria-label", p.name + " 삭제");
+        del.addEventListener("click", function () { deletePlace(p); });
+        actions.appendChild(edit);
+        actions.appendChild(del);
+        card.appendChild(actions);
+      }
+      plListEl.appendChild(card);
+    });
+  }
+
+  document.getElementById("pl-reset").addEventListener("click", function () {
+    if (!confirm("저장한 곳을 처음 " + DEFAULT_PLACES.length + "곳으로 되돌릴까요? 직접 저장한 곳과 고친 내용이 모두 사라집니다.")) return;
+    places = copyDefaultPlaces();
+    plEditing = null;
+    if (ggPicked && ggPicked.type === "saved" && !places.some(function (x) { return x.id === ggPicked.id; })) {
+      ggPicked = null;
+      ggSaveMsg = "";
+    }
+    savePlaces();
+    renderAllPlaces();
+  });
+
+  // 장소가 바뀌면 저장한 곳 화면, 공강 화면(판정 목록·지도 점·고른 곳 판정)을 함께 다시 그림
+  function renderAllPlaces() {
+    renderGonggang();
+    renderPlaces();
   }
 
   // 길 찾기 결과가 올 때마다 공강 화면을 다시 그림 (연속으로 와도 한 번에 모아서)
