@@ -98,6 +98,8 @@
   .card .when { font-weight: 700; }
   .card .sub { font-size: 14px; color: #333333; }
   .card .now { font-size: 14px; font-weight: 700; color: #0a5c2e; }
+  .elev { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 12px; }
+  .elev-label { font-weight: 600; }
   .summary { margin: 0 0 4px; font-weight: 600; }
   .note { margin: 0 0 12px; font-size: 14px; color: #444444; }
   .place-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
@@ -136,6 +138,7 @@
     <p id="gg-warn" class="storage-warn" hidden></p>
     <div id="gg-days" class="days" role="group" aria-label="요일 선택"></div>
     <div id="gg-cards" class="cards"></div>
+    <div id="gg-elev" class="elev" role="group" aria-label="엘리베이터 혼잡도"></div>
     <div id="gg-result"></div>
   </section>
 
@@ -225,7 +228,8 @@
   var ENTRY_MIN = 1;       // 건물 출입
   var MARGIN_MIN = 2;      // 여유
   var STAIRS_MIN = 1;      // 2층
-  var ELEVATOR_MIN = 5;    // 3층 이상, 붐빔 고정 (토글은 아직 없음)
+  var ELEVATOR_BUSY_MIN = 5;    // 3층 이상, 붐빔
+  var ELEVATOR_QUIET_MIN = 1;   // 3층 이상, 한산
   var GAP_MIN = 20;        // 이 이상 비면 공강
   var BUILDING_COORDS = {
     "원형관":   { lat: 37.0013193, lng: 127.2287837 },
@@ -240,10 +244,10 @@
     return 2 * R * Math.asin(Math.sqrt(a));
   }
 
-  function floorMoveMin(floor) {
+  function floorMoveMin(floor, elevatorMin) {
     if (floor <= 1) return 0;
     if (floor === 2) return STAIRS_MIN;
-    return ELEVATOR_MIN;
+    return elevatorMin;
   }
 
   function walkMin(place, building) {
@@ -277,10 +281,10 @@
   }
 
   // gap: findGaps 결과 하나, startMin: 계산 시작 시각(분), place: 저장한 곳
-  function judge(gap, startMin, place) {
+  function judge(gap, startMin, place, elevatorMin) {
     var remaining = gap.end - startMin;
-    var go = floorMoveMin(floorOf(gap.prev.room)) + walkMin(place, gap.prev.building);
-    var back = walkMin(place, gap.next.building) + floorMoveMin(floorOf(gap.next.room));
+    var go = floorMoveMin(floorOf(gap.prev.room), elevatorMin) + walkMin(place, gap.prev.building);
+    var back = walkMin(place, gap.next.building) + floorMoveMin(floorOf(gap.next.room), elevatorMin);
     var stay = remaining - go - back - MARGIN_MIN;
     var ok = stay >= place.stay;
     var arrival = startMin + go;
@@ -496,6 +500,7 @@
   }
   var ggDay = todayIndex() >= 0 ? DAYS[todayIndex()] : DAYS[0];
   var ggGap = 0;
+  var ggQuiet = false;   // 엘리베이터 한산 여부. 기본값은 붐빔
 
   function classLabel(c) {
     return c.name + " (" + c.building + " " + c.room + "호, " + floorOf(c.room) + "층)";
@@ -525,8 +530,10 @@
 
     var cardsEl = document.getElementById("gg-cards");
     var resultEl = document.getElementById("gg-result");
+    var elevEl = document.getElementById("gg-elev");
     cardsEl.textContent = "";
     resultEl.textContent = "";
+    elevEl.textContent = "";
 
     if (gaps.length === 0) {
       cardsEl.appendChild(el("p", "empty", ggDay + "요일은 공강이 없습니다."));
@@ -545,6 +552,16 @@
       cardsEl.appendChild(card);
     });
 
+    elevEl.appendChild(el("span", "elev-label", "엘리베이터:"));
+    [[false, "붐빔 " + ELEVATOR_BUSY_MIN + "분"], [true, "한산 " + ELEVATOR_QUIET_MIN + "분"]].forEach(function (opt) {
+      var b = el("button", "day-btn", opt[1]);
+      b.type = "button";
+      b.setAttribute("aria-pressed", ggQuiet === opt[0] ? "true" : "false");
+      b.addEventListener("click", function () { ggQuiet = opt[0]; renderGonggang(); });
+      elevEl.appendChild(b);
+    });
+    var elevatorMin = ggQuiet ? ELEVATOR_QUIET_MIN : ELEVATOR_BUSY_MIN;
+
     var g = gaps[ggGap];
     var startMin = isNow(g) ? now : g.start;
 
@@ -552,9 +569,9 @@
       "계산 시작 " + fmt(startMin) + (isNow(g) ? " (현재 시각)" : " (공강 시작)") +
       " · 남은 공강 " + (g.end - startMin) + "분 · 다음 수업 " + fmt(g.end)));
     resultEl.appendChild(el("p", "note",
-      "거리는 직선거리 × 1.3으로 추정한 값이고, 엘리베이터는 붐빔(5분) 기준입니다. 머물 수 있는 시간이 긴 순으로 정렬했습니다."));
+      "거리는 직선거리 × 1.3으로 추정한 값이고, 엘리베이터는 " + (ggQuiet ? "한산(" + ELEVATOR_QUIET_MIN : "붐빔(" + ELEVATOR_BUSY_MIN) + "분) 기준입니다. 머물 수 있는 시간이 긴 순으로 정렬했습니다."));
 
-    var rows = places.map(function (p) { return { p: p, r: judge(g, startMin, p) }; })
+    var rows = places.map(function (p) { return { p: p, r: judge(g, startMin, p, elevatorMin) }; })
       .sort(function (a, b) { return b.r.stay - a.r.stay; });
 
     var ul = el("ul", "place-list");
