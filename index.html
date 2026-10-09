@@ -110,6 +110,27 @@
   .stay-field label { font-weight: 600; }
   .stay-field input { width: 90px; margin-top: 0; }
   .stay-msg { color: #b00020; font-weight: 600; font-size: 14px; }
+  .search { margin-bottom: 12px; }
+  .search form { margin: 0; padding: 0; border: none; border-radius: 0; }
+  .search label { display: block; margin-bottom: 2px; }
+  .search-row { display: flex; gap: 8px; }
+  .search-row input { margin-top: 0; flex: 1; min-width: 0; }
+  .search-btn, .save-btn {
+    padding: 6px 16px; border: none; border-radius: 4px;
+    background: #1d4ed8; color: #ffffff; font: inherit; font-weight: 700; cursor: pointer;
+  }
+  .search-btn:disabled { background: #6b7280; cursor: default; }
+  .save-btn { margin-top: 8px; }
+  .search-results { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 6px; }
+  .result-btn {
+    display: block; width: 100%; text-align: left;
+    padding: 8px 12px; border: 1px solid #767676; border-radius: 6px;
+    background: #ffffff; color: #1a1a1a; font: inherit; cursor: pointer;
+  }
+  .result-btn[aria-pressed="true"] { border: 2px solid #1d4ed8; background: #eff4ff; padding: 7px 11px; }
+  .result-btn .addr { display: block; font-size: 13px; color: #444444; }
+  .save-msg { margin: 6px 0 0; font-size: 14px; font-weight: 600; }
+  .save-msg.error { color: #b00020; }
   .map { height: 380px; border: 1px solid #767676; border-radius: 6px; }
   .legend { list-style: none; display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 6px 0 0; padding: 0; font-size: 14px; }
   .sw { display: inline-block; width: 12px; height: 12px; border: 1px solid #1a1a1a; border-radius: 50%; vertical-align: -1px; }
@@ -162,6 +183,18 @@
       <label for="gg-stay-input">머물 시간 (분)</label>
       <input id="gg-stay-input" type="number" min="1" max="180" step="1" value="25" inputmode="numeric">
       <span id="gg-stay-msg" class="stay-msg" role="status"></span>
+    </div>
+    <div id="gg-search" class="search" hidden>
+      <form id="gg-search-form" novalidate>
+        <label for="gg-search-input">가게 검색</label>
+        <div class="search-row">
+          <input id="gg-search-input" type="search" autocomplete="off" placeholder="가게 이름">
+          <button id="gg-search-btn" class="search-btn" type="submit">검색</button>
+        </div>
+      </form>
+      <p id="gg-search-msg" class="note" role="status"></p>
+      <ul id="gg-search-results" class="search-results"></ul>
+      <p class="note">검색: Nominatim (© OpenStreetMap contributors). 캠퍼스 주변(경도 127.21~127.25, 위도 36.99~37.02)에서만 찾습니다. 검색 버튼이나 Enter를 눌렀을 때만 요청합니다.</p>
     </div>
     <div id="gg-map-wrap" hidden>
       <div id="gg-map" class="map"></div>
@@ -505,6 +538,108 @@
   loadRouteCache();
   /* ROUTE-END */
 
+  /* SEARCH-START */
+  // ---------- 가게 검색 (Nominatim, 키 없음) ----------
+  var SEARCH_BASE = "https://nominatim.openstreetmap.org/search";
+  var SEARCH_LON_MIN = 127.21, SEARCH_LON_MAX = 127.25;   // 캠퍼스 주변 범위
+  var SEARCH_LAT_MIN = 36.99, SEARCH_LAT_MAX = 37.02;
+  var SEARCH_LIMIT = 5;
+  var SEARCH_INTERVAL_MS = 1100;   // 요청 사이 최소 간격 (1초에 한 번 넘게 보내지 않음)
+  var SEARCH_TIMEOUT_MS = 8000;
+  var PLACE_NAME_MAX = 30;
+
+  function buildSearchUrl(q) {
+    return SEARCH_BASE + "?q=" + encodeURIComponent(q) + "&format=jsonv2&limit=" + SEARCH_LIMIT +
+      "&viewbox=" + [SEARCH_LON_MIN, SEARCH_LAT_MAX, SEARCH_LON_MAX, SEARCH_LAT_MIN].join(",") +
+      "&bounded=1&accept-language=ko";
+  }
+
+  // Nominatim 응답 -> [{ name, address, lat, lng }] (범위 밖·이상한 항목은 버림). 배열이 아니면 null
+  function parseSearchResults(json) {
+    if (!Array.isArray(json)) return null;
+    var out = [], seen = {};
+    for (var i = 0; i < json.length && out.length < SEARCH_LIMIT; i++) {
+      var x = json[i];
+      if (!x || typeof x !== "object") continue;
+      var lat = parseFloat(x.lat), lng = parseFloat(x.lon);
+      if (!isFinite(lat) || !isFinite(lng)) continue;
+      if (lng < SEARCH_LON_MIN || lng > SEARCH_LON_MAX || lat < SEARCH_LAT_MIN || lat > SEARCH_LAT_MAX) continue;
+      var parts = typeof x.display_name === "string" ? x.display_name.split(",").map(function (s) { return s.trim(); }) : [];
+      var name = typeof x.name === "string" && x.name.trim() !== "" ? x.name.trim() : (parts[0] || "");
+      if (name === "") continue;
+      var key = name + "|" + lat.toFixed(5) + "," + lng.toFixed(5);
+      if (seen[key]) continue;
+      seen[key] = true;
+      out.push({ name: name, address: parts.slice(1, 4).join(", "), lat: lat, lng: lng });
+    }
+    return out;
+  }
+
+  var searchCache = {};     // 검색어(소문자) -> 결과. 이 페이지를 여는 동안만
+  var searchBusy = false;
+  var searchLastAt = 0;
+
+  // 반환: Promise<{ status: "ok", results } | { status: "error" } | { status: "busy" } | { status: "empty" }>
+  function runSearch(rawQuery) {
+    var q = String(rawQuery).trim();
+    if (q === "") return Promise.resolve({ status: "empty" });
+    var key = q.toLowerCase();
+    if (searchCache[key]) return Promise.resolve({ status: "ok", results: searchCache[key], cached: true });
+    if (searchBusy) return Promise.resolve({ status: "busy" });
+    searchBusy = true;
+    return new Promise(function (resolve) {
+      var finished = false;
+      function done(res) {
+        if (finished) return;
+        finished = true;
+        searchBusy = false;
+        resolve(res);
+      }
+      var wait = Math.max(0, searchLastAt + SEARCH_INTERVAL_MS - Date.now());
+      setTimeout(function () {
+        searchLastAt = Date.now();
+        var timer = null;
+        try {
+          var ctrl = new AbortController();
+          timer = setTimeout(function () { ctrl.abort(); }, SEARCH_TIMEOUT_MS);
+          fetch(buildSearchUrl(q), { signal: ctrl.signal })
+            .then(function (res) { if (!res.ok) throw new Error("http " + res.status); return res.json(); })
+            .then(function (json) {
+              clearTimeout(timer);
+              var results = parseSearchResults(json);
+              if (results === null) { done({ status: "error" }); return; }
+              searchCache[key] = results;
+              done({ status: "ok", results: results });
+            })
+            .catch(function () { clearTimeout(timer); done({ status: "error" }); });
+        } catch (e) {
+          if (timer) clearTimeout(timer);
+          done({ status: "error" });
+        }
+      }, wait);
+    });
+  }
+
+  // ---------- 장소 저장 ----------
+  function placeKey(lat, lng) { return lat.toFixed(5) + "," + lng.toFixed(5); }
+
+  function findSamePlace(list, lat, lng) {
+    var k = placeKey(lat, lng);
+    for (var i = 0; i < list.length; i++) if (placeKey(list[i].lat, list[i].lng) === k) return list[i];
+    return null;
+  }
+
+  function round7(n) { return Math.round(n * 1e7) / 1e7; }
+
+  function makePlace(name, lat, lng, stay) {
+    return {
+      id: "u" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      name: name, lat: round7(lat), lng: round7(lng), stay: stay,
+      open: null, close: null, breakStart: null, breakEnd: null, walk: null
+    };
+  }
+  /* SEARCH-END */
+
   function isValidClass(c) {
     return c && typeof c === "object" &&
       typeof c.id === "string" &&
@@ -696,6 +831,17 @@
   }
   var places = loadPlaces();
 
+  function savePlaces() {
+    try {
+      localStorage.setItem(PLACES_KEY, JSON.stringify(places));
+      placesWarning = "";
+      return true;
+    } catch (e) {
+      placesWarning = "장소를 저장하지 못했습니다. 이번에만 목록에 보이고 새로고침하면 사라질 수 있습니다.";
+      return false;
+    }
+  }
+
   // ---------- 공강 화면 ----------
   function todayIndex() {
     var d = new Date().getDay();            // 0 일 ~ 6 토
@@ -710,7 +856,9 @@
   var ggQuiet = false;   // 엘리베이터 한산 여부. 기본값은 붐빔
   var ggStay = 25;       // 머물 시간 입력값(분). 범위 원과 지도에서 고른 곳 판정에 씀
   var ggCtx = null;      // 지금 선택된 공강의 계산 기준 { g, startMin, elevatorMin }. 공강이 없으면 null
-  var ggPicked = null;   // { type: "saved", id } 또는 { type: "custom", lat, lng }
+  var ggPicked = null;   // { type: "saved", id } 또는 { type: "custom", source: "map" | "search", lat, lng, name? }
+  var ggSaveMsg = "";    // 고른 곳 판정 아래에 보여줄 저장 관련 안내
+  var ggSaveMsgError = false;
 
   var STAY_MIN = 1, STAY_MAX = 180;
   var DOT_COLORS = { ok: "#1b8a3a", maybe: "#f2b705", short: "#8a8a8a" };
@@ -775,7 +923,8 @@
       overlay = L.layerGroup().addTo(map);
       map.on("click", function (e) {
         if (!ggCtx) return;
-        ggPicked = { type: "custom", lat: e.latlng.lat, lng: e.latlng.lng };
+        ggPicked = { type: "custom", source: "map", lat: e.latlng.lat, lng: e.latlng.lng };
+        ggSaveMsg = "";
         refreshPicked();
       });
       return true;
@@ -791,7 +940,7 @@
       for (var i = 0; i < places.length; i++) if (places[i].id === ggPicked.id) return places[i];
       return null;
     }
-    return { id: "custom", name: "지도에서 고른 곳", lat: ggPicked.lat, lng: ggPicked.lng,
+    return { id: "custom", name: ggPicked.name || "지도에서 고른 곳", lat: ggPicked.lat, lng: ggPicked.lng,
              stay: ggStay, open: null, close: null, breakStart: null, breakEnd: null, walk: null };
   }
 
@@ -848,6 +997,7 @@
     places.forEach(function (p) {
       dot(p, p.id === sel, false).on("click", function () {
         ggPicked = { type: "saved", id: p.id };
+        ggSaveMsg = "";
         refreshPicked();
       });
     });
@@ -870,11 +1020,106 @@
     var r = judge(ggCtx.g, ggCtx.startMin, p, ggCtx.elevatorMin, routeOf);
     var ul = el("ul", "place-list");
     var extra = ggPicked.type === "custom"
-      ? "위치 " + p.lat.toFixed(5) + ", " + p.lng.toFixed(5) + " · 머물 시간은 입력값(" + ggStay + "분)을 씁니다"
+      ? (ggPicked.source === "search" ? "검색 결과 · " : "") + "위치 " + p.lat.toFixed(5) + ", " + p.lng.toFixed(5) +
+        " · 머물 시간은 입력값(" + ggStay + "분)을 씁니다"
       : "";
     ul.appendChild(buildRow(p, r, extra));
     box.appendChild(ul);
+
+    if (ggPicked.type === "custom") {
+      var saveBtn = el("button", "save-btn", "저장");
+      saveBtn.type = "button";
+      saveBtn.addEventListener("click", onSavePicked);
+      box.appendChild(saveBtn);
+    }
+    if (ggSaveMsg) box.appendChild(el("p", "save-msg" + (ggSaveMsgError ? " error" : ""), ggSaveMsg));
   }
+
+  // 고른 곳(지도에서 고른 곳·검색 결과)을 이름을 입력받아 저장
+  function onSavePicked() {
+    var pk = ggPicked;
+    if (!pk || pk.type !== "custom") return;
+    function say(text, isError) { ggSaveMsg = text; ggSaveMsgError = isError; renderPicked(); }
+
+    var dup = findSamePlace(places, pk.lat, pk.lng);
+    if (dup) return say("이미 저장한 곳입니다 (" + dup.name + ")", true);
+
+    var input = window.prompt("저장할 이름을 입력하세요 (최대 " + PLACE_NAME_MAX + "자)", pk.name || "");
+    if (input === null) return;   // 취소
+    var name = input.trim();
+    if (name === "") return say("이름을 입력해야 저장할 수 있습니다.", true);
+    if (name.length > PLACE_NAME_MAX) return say("이름은 " + PLACE_NAME_MAX + "자 이하로 입력하세요 (지금 " + name.length + "자).", true);
+
+    var p = makePlace(name, pk.lat, pk.lng, ggStay);
+    places.push(p);
+    var saved = savePlaces();
+    ggPicked = { type: "saved", id: p.id };
+    ggSaveMsg = saved ? "'" + name + "'을(를) 저장했습니다. 저장한 곳 목록과 지도에 추가됐습니다." : "";
+    ggSaveMsgError = false;
+    renderGonggang();   // 목록, 지도 점, 고른 곳 판정을 새로 그림
+  }
+
+  // ---------- 가게 검색 화면 ----------
+  var searchForm = document.getElementById("gg-search-form");
+  var searchInput = document.getElementById("gg-search-input");
+  var searchBtn = document.getElementById("gg-search-btn");
+  var searchMsg = document.getElementById("gg-search-msg");
+  var searchList = document.getElementById("gg-search-results");
+  var searchShown = [];   // 지금 목록에 보이는 결과
+
+  function updateSearchSelection() {
+    var btns = searchList.querySelectorAll(".result-btn");
+    Array.prototype.forEach.call(btns, function (b, i) {
+      var s = searchShown[i];
+      var on = !!(ggPicked && ggPicked.type === "custom" && ggPicked.source === "search" &&
+        s && placeKey(ggPicked.lat, ggPicked.lng) === placeKey(s.lat, s.lng));
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+  }
+
+  function renderSearchResults(results) {
+    searchShown = results;
+    searchList.textContent = "";
+    if (results.length === 0) {
+      searchMsg.textContent = "검색에 안 나오는 가게는 지도에서 직접 눌러 고르세요";
+      return;
+    }
+    searchMsg.textContent = "검색 결과 " + results.length + "개 — 누르면 지도가 그곳으로 옮겨지고 판정이 나옵니다.";
+    results.forEach(function (s) {
+      var li = el("li", "");
+      var b = el("button", "result-btn");
+      b.type = "button";
+      b.setAttribute("aria-pressed", "false");
+      b.appendChild(el("b", "", s.name));
+      if (s.address) b.appendChild(el("span", "addr", s.address));
+      b.addEventListener("click", function () {
+        if (!map || !ggCtx) return;
+        ggPicked = { type: "custom", source: "search", name: s.name, lat: s.lat, lng: s.lng };
+        ggSaveMsg = "";
+        map.setView([s.lat, s.lng], Math.max(map.getZoom(), 16));
+        refreshPicked();
+      });
+      li.appendChild(b);
+      searchList.appendChild(li);
+    });
+    updateSearchSelection();
+  }
+
+  searchForm.addEventListener("submit", function (ev) {
+    ev.preventDefault();               // 검색 버튼이나 Enter를 눌렀을 때만 요청
+    if (searchBtn.disabled) return;
+    var q = searchInput.value.trim();
+    if (q === "") { searchMsg.textContent = "검색어를 입력하세요."; return; }
+    searchBtn.disabled = true;
+    searchMsg.textContent = "검색 중…";
+    searchList.textContent = "";
+    searchShown = [];
+    runSearch(q).then(function (res) {
+      searchBtn.disabled = false;
+      if (res.status === "ok") renderSearchResults(res.results);
+      else searchMsg.textContent = "검색에 실패했습니다. 잠시 뒤 다시 시도하거나 지도에서 직접 눌러 고르세요.";
+    });
+  });
 
   function refreshPicked() {
     if (!map) return;
@@ -885,6 +1130,7 @@
     }
     drawOverlay();
     renderPicked();
+    updateSearchSelection();
   }
 
   var stayInput = document.getElementById("gg-stay-input");
@@ -938,6 +1184,7 @@
     elevEl.textContent = "";
 
     var stayEl = document.getElementById("gg-stay");
+    var searchEl = document.getElementById("gg-search");
     var mapWrap = document.getElementById("gg-map-wrap");
     var mapEl = document.getElementById("gg-map");
     var legendEl = document.getElementById("gg-legend");
@@ -946,6 +1193,7 @@
     if (gaps.length === 0) {
       ggCtx = null;
       stayEl.hidden = true;
+      searchEl.hidden = true;
       mapWrap.hidden = true;
       pickedEl.hidden = true;
       cardsEl.appendChild(el("p", "empty", ggDay + "요일은 공강이 없습니다."));
@@ -1010,6 +1258,7 @@
     mapEl.hidden = false;
     var mapOk = ensureMap();
     stayEl.hidden = !mapOk;
+    searchEl.hidden = !mapOk;
     mapEl.hidden = !mapOk;
     legendEl.hidden = !mapOk;
     if (mapOk) {
