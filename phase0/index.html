@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>공강 어디 갈까?</title>
+<style>
+  :root { --bg:#f5f7fb; --card:#fff; --ink:#1d2433; --sub:#6b7280; --main:#4f6ef7; --ok:#16a34a; --tight:#d97706; --no:#9ca3af; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#12151c; --card:#1c212c; --ink:#e8ebf2; --sub:#9aa3b5; --main:#6f8bff; }
+    input[type=number], input[type=text], input[type=time], select { background:#12151c; color:var(--ink); border-color:#343b4c; }
+    button.chip { background:#2a3142; }
+  }
+  * { box-sizing: border-box; }
+  input[type=time] { padding:9px 10px; border:1px solid #d6dbe6; border-radius:8px; font-size:1rem; }
+  button.star { background:transparent; color:var(--no); padding:2px 6px; font-size:1.1rem; }
+  button.star.on { color:#f5b301; }
+  button.reset { background:transparent; color:var(--sub); text-decoration:underline; padding:4px; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:system-ui,"Malgun Gothic",sans-serif; }
+  .wrap { max-width:640px; margin:0 auto; padding:20px 16px 60px; }
+  h1 { font-size:1.6rem; margin:0 0 4px; }
+  .sub { color:var(--sub); margin:0 0 20px; }
+  .card { background:var(--card); border-radius:14px; padding:16px; margin-bottom:14px; box-shadow:0 1px 4px rgba(0,0,0,.07); }
+  label { font-weight:600; display:block; margin-bottom:8px; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  input[type=number], input[type=text], select { padding:9px 10px; border:1px solid #d6dbe6; border-radius:8px; font-size:1rem; }
+  input[type=number] { width:90px; }
+  button { cursor:pointer; border:0; border-radius:8px; padding:9px 14px; font-size:.95rem; background:var(--main); color:#fff; }
+  button.chip { background:#eef1fb; color:var(--ink); }
+  button.chip.on { background:var(--main); color:#fff; }
+  button.del { background:transparent; color:var(--no); padding:2px 6px; }
+  .place { display:flex; justify-content:space-between; gap:10px; align-items:center; }
+  .place h3 { margin:0 0 2px; font-size:1.05rem; }
+  .meta { color:var(--sub); font-size:.85rem; }
+  .badge { font-weight:700; font-size:.9rem; white-space:nowrap; }
+  .ok { color:var(--ok); } .tight { color:var(--tight); } .no { color:var(--no); }
+  .place.no-card { opacity:.55; }
+  details summary { cursor:pointer; font-weight:600; }
+  .pick { background:linear-gradient(135deg,#4f6ef7,#7c5cf0); color:#fff; }
+  .pick .meta { color:#e6e9ff; }
+  .empty { text-align:center; color:var(--sub); padding:20px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🎒 공강 어디 갈까?</h1>
+  <p class="sub">공강 시간을 넣으면 다녀올 수 있는 곳을 알려줘요.</p>
+
+  <div class="card">
+    <label for="gap">공강이 몇 분인가요?</label>
+    <div class="row">
+      <input type="number" id="gap" value="60" min="10" max="360" step="5"> 분
+      <button class="chip" data-g="30">30분</button>
+      <button class="chip" data-g="60">1시간</button>
+      <button class="chip" data-g="90">1시간 30분</button>
+      <button class="chip" data-g="120">2시간</button>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <span class="meta">또는 시각으로:</span>
+      <input type="time" id="tFrom" value="12:00"> ~ <input type="time" id="tTo" value="13:00">
+    </div>
+  </div>
+
+  <div class="card">
+    <label>어떤 곳이 끌려요?</label>
+    <div class="row" id="cats"></div>
+  </div>
+
+  <div id="list"></div>
+
+  <div class="card">
+    <details id="form">
+      <summary id="formTitle">＋ 내 장소 추가하기</summary>
+      <div class="row" style="margin-top:12px">
+        <input type="text" id="nName" placeholder="장소 이름">
+        <select id="nCat"></select>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <span>걸어서</span><input type="number" id="nWalk" value="5" min="0"> 분
+        <span>머무는 시간</span><input type="number" id="nStay" value="20" min="0"> 분
+      </div>
+      <div class="row" style="margin-top:8px">
+        <span>영업시간(선택)</span><input type="time" id="nOpen"> ~ <input type="time" id="nClose">
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="add">추가</button><button class="chip" id="cancel" hidden>취소</button>
+      </div>
+    </details>
+  </div>
+  <div style="text-align:center"><button class="reset" id="reset">예시 장소로 초기화</button></div>
+</div>
+
+<script>
+const CATS = ['전체','밥','카페','공부','쉬기','운동','구경'];
+const EMOJI = {밥:'🍚',카페:'☕',공부:'📚',쉬기:'😴',운동:'🏃',구경:'🌳'};
+const DEFAULTS = [
+  {name:'학생식당',cat:'밥',walk:5,stay:30,open:'11:00',close:'19:00'},
+  {name:'교내 편의점',cat:'밥',walk:3,stay:10},
+  {name:'교문 앞 분식집',cat:'밥',walk:10,stay:30},
+  {name:'교내 카페',cat:'카페',walk:4,stay:25,open:'08:30',close:'19:00'},
+  {name:'정문 앞 카페거리',cat:'카페',walk:12,stay:40},
+  {name:'중앙도서관',cat:'공부',walk:7,stay:45,open:'09:00',close:'22:00'},
+  {name:'스터디카페',cat:'공부',walk:10,stay:60},
+  {name:'학생회관 휴게실',cat:'쉬기',walk:4,stay:30},
+  {name:'잔디밭 벤치',cat:'쉬기',walk:3,stay:20},
+  {name:'체육관',cat:'운동',walk:8,stay:40},
+  {name:'운동장 한 바퀴',cat:'운동',walk:5,stay:20},
+  {name:'캠퍼스 산책로',cat:'구경',walk:2,stay:25},
+  {name:'호수 / 연못',cat:'구경',walk:9,stay:20},
+];
+
+let places = JSON.parse(localStorage.getItem('places') || 'null') || DEFAULTS;
+let cat = localStorage.getItem('cat') || '전체';
+const $ = id => document.getElementById(id);
+const toMin = v => { const [h,m] = v.split(':').map(Number); return h*60+m; };
+const startMin = () => $('tFrom').value ? toMin($('tFrom').value) : 12*60;
+let editIdx = -1;
+const esc = t => String(t).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+$('gap').value = localStorage.getItem('gap') || 60;
+
+function save(){ localStorage.setItem('places', JSON.stringify(places)); }
+
+function renderCats(){
+  $('cats').innerHTML = CATS.map(c =>
+    `<button class="chip ${c===cat?'on':''}" data-c="${c}">${EMOJI[c]||''} ${c}</button>`).join('');
+  $('nCat').innerHTML = CATS.slice(1).map(c => `<option>${c}</option>`).join('');
+}
+
+const tier = p => p.left >= 10 ? 0 : p.left >= 0 ? 1 : 2;  // 여유 / 빠듯 / 불가
+function render(){
+  const gap = +$('gap').value || 0;
+  localStorage.setItem('gap', gap);
+  const items = places
+    .map((p,i) => {
+      const total = p.walk*2 + p.stay, arrive = startMin() + p.walk;
+      const closed = !!(p.open && p.close) && (arrive < toMin(p.open) || arrive + p.stay > toMin(p.close));
+      return {...p, i, total, closed, left: closed ? -999 : gap - total};
+    })
+    .filter(p => cat==='전체' || p.cat===cat)
+    .sort((a,b) => tier(a) - tier(b) || (!!b.fav - !!a.fav) || (tier(a) < 2 ? a.left-b.left : b.left-a.left));
+
+  if(!items.length){ $('list').innerHTML = '<div class="empty">이 카테고리에는 장소가 없어요.</div>'; return; }
+
+  const best = items.find(p => p.left >= 0);  // 정렬상 여유 있는 곳이 먼저 옴
+  const pick = best ? `<div class="card pick"><div class="meta">지금 추천</div><h3 style="margin:2px 0;font-size:1.3rem">${EMOJI[best.cat]||''} ${esc(best.name)}</h3><div class="meta">${gap}분 중 ${best.total}분 쓰고 ${best.left}분 남아요</div></div>` : '<div class="card empty">이 시간 안에 다녀올 수 있는 곳이 없어요. 시간을 늘리거나 장소를 추가해보세요.</div>';
+  $('list').innerHTML = pick + items.map(p => {
+    let cls, text;
+    if(p.left >= 10){ cls='ok'; text=`여유 ${p.left}분`; }
+    else if(p.left >= 0){ cls='tight'; text=`빠듯 (${p.left}분 남음)`; }
+    else if(p.closed){ cls='no'; text=`영업시간 아님 (${p.open}~${p.close})`; }
+    else { cls='no'; text=`${-p.left}분 부족`; }
+    return `<div class="card place ${cls==='no'?'no-card':''}">
+      <div>
+        <h3>${EMOJI[p.cat]||''} ${esc(p.name)}</h3>
+        <div class="meta">왕복 ${p.walk*2}분 + 머물기 ${p.stay}분 = 총 ${p.total}분${p.open&&p.close?` · ${p.open}~${p.close}`:''}</div>
+      </div>
+      <div style="text-align:right">
+        <div class="badge ${cls}">${text}</div>
+        <button class="del" data-e="${p.i}" title="수정">수정</button><button class="star ${p.fav?'on':''}" data-f="${p.i}" title="즐겨찾기" aria-label="즐겨찾기">${p.fav?'★':'☆'}</button><button class="del" data-d="${p.i}" title="삭제">삭제</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+document.addEventListener('click', e => {
+  const t = e.target;
+  if(t.dataset.g){ $('gap').value = t.dataset.g; syncTo(); render(); }
+  if(t.dataset.c){ cat = t.dataset.c; localStorage.setItem('cat', cat); renderCats(); render(); }
+  if(t.dataset.e !== undefined){
+    editIdx = +t.dataset.e; const q = places[editIdx];
+    $('nName').value = q.name; $('nCat').value = q.cat; $('nWalk').value = q.walk; $('nStay').value = q.stay;
+    $('nOpen').value = q.open || ''; $('nClose').value = q.close || '';
+    $('add').textContent = '저장'; $('cancel').hidden = false; $('formTitle').textContent = '✏️ 장소 수정';
+    $('form').open = true; $('form').scrollIntoView({behavior:'smooth'});
+  }
+  if(t.id === 'cancel') resetForm();
+  if(t.dataset.f !== undefined){ const q = places[+t.dataset.f]; q.fav = !q.fav; save(); render(); }
+  if(t.id === 'reset' && confirm('저장한 장소를 모두 지우고 예시 장소로 되돌릴까요?')){ places = DEFAULTS.map(d => ({...d})); save(); render(); }
+  if(t.dataset.d !== undefined){ places.splice(+t.dataset.d,1); save(); render(); }
+});
+const fmt = m => String(Math.floor(m/60)%24).padStart(2,'0') + ':' + String(m%60).padStart(2,'0');
+function syncTo(){ $('tTo').value = fmt(startMin() + (+$('gap').value || 0)); }
+$('gap').addEventListener('input', () => { syncTo(); render(); });
+function fromTimes(){
+  if(!$('tFrom').value || !$('tTo').value) return;
+  const d = toMin($('tTo').value) - toMin($('tFrom').value);
+  if(d > 0){ $('gap').value = d; render(); }
+}
+$('tFrom').addEventListener('input', () => { syncTo(); render(); });
+$('tTo').addEventListener('input', fromTimes);
+function resetForm(){
+  editIdx = -1; ['nName','nOpen','nClose'].forEach(id => $(id).value = '');
+  $('nWalk').value = 5; $('nStay').value = 20;
+  $('add').textContent = '추가'; $('cancel').hidden = true; $('formTitle').textContent = '＋ 내 장소 추가하기';
+}
+$('add').addEventListener('click', () => {
+  const name = $('nName').value.trim();
+  if(!name){ $('nName').focus(); return; }
+  const item = {name, cat:$('nCat').value, walk:Math.max(0,+$('nWalk').value||0), stay:Math.max(0,+$('nStay').value||0),
+    open:$('nOpen').value, close:$('nClose').value};
+  if(editIdx >= 0){ item.fav = places[editIdx].fav; places[editIdx] = item; } else places.push(item);
+  save(); resetForm(); render();
+});
+
+syncTo();
+renderCats(); render();
+</script>
+</body>
+</html>
