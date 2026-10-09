@@ -81,6 +81,34 @@
   .time-label { display: block; font-size: 14px; font-weight: 600; }
   .time-selects { display: flex; align-items: center; gap: 4px; }
   .time-selects select { margin-top: 2px; }
+  /* 공강 화면 */
+  .days { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .day-btn {
+    padding: 6px 14px; border: 1px solid #767676; border-radius: 16px;
+    background: #ffffff; color: #1a1a1a; font: inherit; cursor: pointer;
+  }
+  .day-btn[aria-pressed="true"] { background: #1d4ed8; border-color: #1d4ed8; color: #ffffff; font-weight: 700; }
+  .cards { display: grid; gap: 8px; margin-bottom: 16px; }
+  .card {
+    display: block; width: 100%; text-align: left;
+    padding: 10px 12px; border: 1px solid #767676; border-radius: 6px;
+    background: #ffffff; color: #1a1a1a; font: inherit; cursor: pointer;
+  }
+  .card[aria-pressed="true"] { border: 2px solid #1d4ed8; background: #eff4ff; padding: 9px 11px; }
+  .card .when { font-weight: 700; }
+  .card .sub { font-size: 14px; color: #333333; }
+  .card .now { font-size: 14px; font-weight: 700; color: #0a5c2e; }
+  .summary { margin: 0 0 4px; font-weight: 600; }
+  .note { margin: 0 0 12px; font-size: 14px; color: #444444; }
+  .place-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .place-row { padding: 10px 12px; border: 1px solid #c8c8c8; border-radius: 6px; }
+  .place-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .place-name { font-weight: 700; }
+  .badge { padding: 1px 8px; border-radius: 10px; font-size: 14px; font-weight: 700; border: 1px solid; }
+  .badge.ok { color: #0a5c2e; background: #e6f4ea; border-color: #0a5c2e; }
+  .badge.short { color: #b00020; background: #fdeaea; border-color: #b00020; }
+  .badge.maybe { color: #6b4100; background: #fff4d6; border-color: #6b4100; }
+  .place-detail { margin: 4px 0 0; font-size: 14px; color: #333333; }
   .submit {
     margin-top: 12px; padding: 8px 20px;
     border: none; border-radius: 4px;
@@ -105,7 +133,10 @@
 <main>
   <section id="screen-gonggang" role="tabpanel" aria-labelledby="tab-gonggang">
     <h2>공강</h2>
-    <p class="empty">아직 비어 있음</p>
+    <p id="gg-warn" class="storage-warn" hidden></p>
+    <div id="gg-days" class="days" role="group" aria-label="요일 선택"></div>
+    <div id="gg-cards" class="cards"></div>
+    <div id="gg-result"></div>
   </section>
 
   <section id="screen-places" role="tabpanel" aria-labelledby="tab-places" hidden>
@@ -178,6 +209,7 @@
     { id: "d7", day: "금", name: "캡스톤 디자인 프로젝트 I",     building: "원형관",   room: "108", start: "09:30", end: "13:30" }
   ];
 
+  /* CALC-START */
   // ---------- 시간·층 계산 ----------
   function toMin(hhmm) {
     var p = hhmm.split(":");
@@ -186,6 +218,81 @@
   function pad(n) { return (n < 10 ? "0" : "") + n; }
   function fmt(min) { return pad(Math.floor(min / 60)) + ":" + pad(min % 60); }
   function floorOf(room) { return parseInt(room.charAt(0), 10); }
+
+  // ---------- 판정 계산 (CLAUDE.md 계산 규칙) ----------
+  var WALK_M_PER_MIN = 75;
+  var DETOUR = 1.3;        // 길 찾기 없이 직선거리 × 1.3
+  var ENTRY_MIN = 1;       // 건물 출입
+  var MARGIN_MIN = 2;      // 여유
+  var STAIRS_MIN = 1;      // 2층
+  var ELEVATOR_MIN = 5;    // 3층 이상, 붐빔 고정 (토글은 아직 없음)
+  var GAP_MIN = 20;        // 이 이상 비면 공강
+  var BUILDING_COORDS = {
+    "원형관":   { lat: 37.0013193, lng: 127.2287837 },
+    "중앙문화관": { lat: 37.0038675, lng: 127.2292335 }
+  };
+
+  function distanceM(lat1, lng1, lat2, lng2) {
+    var R = 6371000, rad = Math.PI / 180;
+    var dLat = (lat2 - lat1) * rad, dLng = (lng2 - lng1) * rad;
+    var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    return 2 * R * Math.asin(Math.sqrt(a));
+  }
+
+  function floorMoveMin(floor) {
+    if (floor <= 1) return 0;
+    if (floor === 2) return STAIRS_MIN;
+    return ELEVATOR_MIN;
+  }
+
+  function walkMin(place, building) {
+    if (place.walk !== null && place.walk !== undefined) return place.walk;
+    var b = BUILDING_COORDS[building];
+    var d = distanceM(b.lat, b.lng, place.lat, place.lng);
+    return Math.ceil(d * DETOUR / WALK_M_PER_MIN) + ENTRY_MIN;
+  }
+
+  // 같은 요일 연속 수업 사이 간격이 GAP_MIN 이상이면 공강
+  function findGaps(classes, day) {
+    var list = classes.filter(function (c) { return c.day === day; })
+      .sort(function (a, b) { return toMin(a.start) - toMin(b.start); });
+    var gaps = [];
+    for (var i = 1; i < list.length; i++) {
+      var s = toMin(list[i - 1].end), e = toMin(list[i].start);
+      if (e - s >= GAP_MIN) gaps.push({ prev: list[i - 1], next: list[i], start: s, end: e });
+    }
+    return gaps;
+  }
+
+  function maybeClosed(place, arrival) {
+    var leave = arrival + place.stay;
+    if (place.open !== null && place.close !== null) {
+      if (arrival < toMin(place.open) || leave > toMin(place.close)) return true;
+    }
+    if (place.breakStart !== null && place.breakEnd !== null) {
+      if (arrival < toMin(place.breakEnd) && leave > toMin(place.breakStart)) return true;
+    }
+    return false;
+  }
+
+  // gap: findGaps 결과 하나, startMin: 계산 시작 시각(분), place: 저장한 곳
+  function judge(gap, startMin, place) {
+    var remaining = gap.end - startMin;
+    var go = floorMoveMin(floorOf(gap.prev.room)) + walkMin(place, gap.prev.building);
+    var back = walkMin(place, gap.next.building) + floorMoveMin(floorOf(gap.next.room));
+    var stay = remaining - go - back - MARGIN_MIN;
+    var ok = stay >= place.stay;
+    var arrival = startMin + go;
+    return {
+      remaining: remaining, go: go, back: back, stay: stay, ok: ok,
+      shortage: ok ? 0 : place.stay - stay,
+      leaveAt: gap.end - back - MARGIN_MIN,
+      arrival: arrival,
+      maybeClosed: maybeClosed(place, arrival)
+    };
+  }
+  /* CALC-END */
 
   function isValidClass(c) {
     return c && typeof c === "object" &&
@@ -243,6 +350,7 @@
       t.setAttribute("aria-selected", on ? "true" : "false");
       document.getElementById("screen-" + t.getAttribute("data-screen")).hidden = !on;
     });
+    if (name === "gonggang") renderGonggang();   // 지금 모드가 현재 시각을 따르도록
   }
   Array.prototype.forEach.call(tabs, function (t) {
     t.addEventListener("click", function () { showScreen(t.getAttribute("data-screen")); });
@@ -317,6 +425,162 @@
     });
 
     renderWarning();
+    renderGonggang();
+  }
+
+  // ---------- 저장한 곳 (이번 기능에서는 읽기만) ----------
+  var PLACES_KEY = "places";
+  var placesWarning = "";
+
+  function place(id, name, lat, lng, stay, open, close) {
+    return { id: id, name: name, lat: lat, lng: lng, stay: stay,
+             open: open, close: close, breakStart: null, breakEnd: null, walk: null };
+  }
+  var DEFAULT_PLACES = [
+    place("p1", "학생식당 (건강증진관)",     37.0054616, 127.227504,  25, null, null),
+    place("p2", "까로치아 (원형관 1층 카페)", 37.0013193, 127.2287837, 10, null, null),
+    place("p3", "부리또앤",                  37.0022322, 127.2267668, 20, null, null),
+    place("p4", "하얀집",                    37.0023405, 127.22663,   25, "09:00", "21:00"),
+    place("p5", "소녀식당",                  37.0034352, 127.2249572, 25, "12:00", "20:00"),
+    place("p6", "중앙도서관",                37.0031358, 127.2312322, 30, null, null),
+    place("p7", "한경대 안성캠퍼스",         37.0116265, 127.2642483, 25, null, null)
+  ];
+
+  function isHHMM(s) { return typeof s === "string" && /^\d\d:\d\d$/.test(s); }
+  function isPair(a, b) {
+    return (a === null && b === null) || (isHHMM(a) && isHHMM(b));
+  }
+  function isValidPlace(p) {
+    return p && typeof p === "object" &&
+      typeof p.id === "string" &&
+      typeof p.name === "string" && p.name !== "" &&
+      typeof p.lat === "number" && isFinite(p.lat) &&
+      typeof p.lng === "number" && isFinite(p.lng) &&
+      typeof p.stay === "number" && p.stay > 0 &&
+      isPair(p.open, p.close) && isPair(p.breakStart, p.breakEnd) &&
+      (p.walk === null || (typeof p.walk === "number" && p.walk >= 0));
+  }
+  function copyDefaultPlaces() {
+    return DEFAULT_PLACES.map(function (p) { return Object.assign({}, p); });
+  }
+  function loadPlaces() {
+    var raw = null;
+    try {
+      raw = localStorage.getItem(PLACES_KEY);
+    } catch (e) {
+      placesWarning = "이 브라우저에서는 저장소를 쓸 수 없어 기본 장소 목록으로 동작합니다.";
+      return copyDefaultPlaces();
+    }
+    if (raw === null) {
+      var seed = copyDefaultPlaces();
+      try { localStorage.setItem(PLACES_KEY, JSON.stringify(seed)); } catch (e) { /* 기본값으로 계속 */ }
+      return seed;
+    }
+    try {
+      var data = JSON.parse(raw);
+      if (Array.isArray(data) && data.every(isValidPlace)) return data;
+    } catch (e) { /* 아래에서 기본값 */ }
+    placesWarning = "저장된 장소 목록이 깨져 있어 기본 장소 목록으로 동작합니다.";
+    return copyDefaultPlaces();
+  }
+  var places = loadPlaces();
+
+  // ---------- 공강 화면 ----------
+  function todayIndex() {
+    var d = new Date().getDay();            // 0 일 ~ 6 토
+    return d >= 1 && d <= 5 ? d - 1 : -1;
+  }
+  function nowMinutes() {
+    var n = new Date();
+    return n.getHours() * 60 + n.getMinutes() + (n.getSeconds() > 0 ? 1 : 0);
+  }
+  var ggDay = todayIndex() >= 0 ? DAYS[todayIndex()] : DAYS[0];
+  var ggGap = 0;
+
+  function classLabel(c) {
+    return c.name + " (" + c.building + " " + c.room + "호, " + floorOf(c.room) + "층)";
+  }
+
+  function renderGonggang() {
+    var warn = document.getElementById("gg-warn");
+    warn.textContent = placesWarning;
+    warn.hidden = placesWarning === "";
+
+    var today = todayIndex() >= 0 ? DAYS[todayIndex()] : null;
+
+    var daysEl = document.getElementById("gg-days");
+    daysEl.textContent = "";
+    DAYS.forEach(function (d) {
+      var b = el("button", "day-btn", d + (d === today ? " (오늘)" : ""));
+      b.type = "button";
+      b.setAttribute("aria-pressed", d === ggDay ? "true" : "false");
+      b.addEventListener("click", function () { ggDay = d; ggGap = 0; renderGonggang(); });
+      daysEl.appendChild(b);
+    });
+
+    var gaps = findGaps(timetable, ggDay);
+    if (ggGap >= gaps.length) ggGap = 0;
+    var now = nowMinutes();
+    function isNow(g) { return ggDay === today && now >= g.start && now < g.end; }
+
+    var cardsEl = document.getElementById("gg-cards");
+    var resultEl = document.getElementById("gg-result");
+    cardsEl.textContent = "";
+    resultEl.textContent = "";
+
+    if (gaps.length === 0) {
+      cardsEl.appendChild(el("p", "empty", ggDay + "요일은 공강이 없습니다."));
+      return;
+    }
+
+    gaps.forEach(function (g, i) {
+      var card = el("button", "card");
+      card.type = "button";
+      card.setAttribute("aria-pressed", i === ggGap ? "true" : "false");
+      card.appendChild(el("div", "when", fmt(g.start) + "–" + fmt(g.end) + " · 공강 " + (g.end - g.start) + "분"));
+      card.appendChild(el("div", "sub", "앞 수업: " + classLabel(g.prev)));
+      card.appendChild(el("div", "sub", "다음 수업: " + classLabel(g.next)));
+      if (isNow(g)) card.appendChild(el("div", "now", "지금 공강 중 · 현재 시각부터 계산"));
+      card.addEventListener("click", function () { ggGap = i; renderGonggang(); });
+      cardsEl.appendChild(card);
+    });
+
+    var g = gaps[ggGap];
+    var startMin = isNow(g) ? now : g.start;
+
+    resultEl.appendChild(el("p", "summary",
+      "계산 시작 " + fmt(startMin) + (isNow(g) ? " (현재 시각)" : " (공강 시작)") +
+      " · 남은 공강 " + (g.end - startMin) + "분 · 다음 수업 " + fmt(g.end)));
+    resultEl.appendChild(el("p", "note",
+      "거리는 직선거리 × 1.3으로 추정한 값이고, 엘리베이터는 붐빔(5분) 기준입니다. 머물 수 있는 시간이 긴 순으로 정렬했습니다."));
+
+    var rows = places.map(function (p) { return { p: p, r: judge(g, startMin, p) }; })
+      .sort(function (a, b) { return b.r.stay - a.r.stay; });
+
+    var ul = el("ul", "place-list");
+    rows.forEach(function (row) {
+      var p = row.p, r = row.r;
+      var li = el("li", "place-row");
+
+      var top = el("div", "place-top");
+      top.appendChild(el("span", "place-name", p.name));
+      if (!r.ok) top.appendChild(el("span", "badge short", r.shortage + "분 부족"));
+      else if (r.maybeClosed) top.appendChild(el("span", "badge maybe", "시간은 되지만 문 닫았을 수 있음"));
+      else top.appendChild(el("span", "badge ok", "가능"));
+      li.appendChild(top);
+
+      li.appendChild(el("p", "place-detail", r.ok
+        ? "머물 수 있는 시간 " + r.stay + "분 · 늦어도 " + fmt(r.leaveAt) + "에 출발"
+        : "늦어도 출발 시각 —"));
+      var detail = "가는 시간 " + r.go + "분 · 돌아오는 시간 " + r.back + "분 · 필요한 머물 시간 " + p.stay + "분";
+      li.appendChild(el("p", "place-detail", detail));
+      if (p.open !== null) {
+        li.appendChild(el("p", "place-detail",
+          "영업 " + p.open + "–" + p.close + " · 도착 예정 " + fmt(r.arrival)));
+      }
+      ul.appendChild(li);
+    });
+    resultEl.appendChild(ul);
   }
 
   // ---------- 추가·삭제 ----------
