@@ -284,11 +284,24 @@
     return elevatorMin;
   }
 
-  function walkMin(place, building) {
-    if (place.walk !== null && place.walk !== undefined) return place.walk;
+  var ROUTE_ANOMALY_FACTOR = 2;   // 길 찾기 거리가 직선거리의 이 배수를 넘으면 지도 데이터 이상으로 봄
+
+  // 도보 한 구간(건물 ↔ 장소). 우선순위: 직접 잰 값 → 길 찾기 → 직선 × 1.3
+  // routeOf(building, place): { state: "ok", m } | { state: "pending" } | { state: "failed" } | undefined
+  // 반환: { min, src: "direct" | "route" | "anomaly" | "straight", straightM, routeM, state }
+  function walkLeg(place, building, routeOf) {
+    if (place.walk !== null && place.walk !== undefined) return { min: place.walk, src: "direct" };
     var b = BUILDING_COORDS[building];
-    var d = distanceM(b.lat, b.lng, place.lat, place.lng);
-    return Math.ceil(d * DETOUR / WALK_M_PER_MIN) + ENTRY_MIN;
+    var straightM = distanceM(b.lat, b.lng, place.lat, place.lng);
+    var straightMin = Math.ceil(straightM * DETOUR / WALK_M_PER_MIN) + ENTRY_MIN;
+    var rt = routeOf ? routeOf(building, place) : undefined;
+    if (rt && rt.state === "ok") {
+      if (rt.m > ROUTE_ANOMALY_FACTOR * straightM) {
+        return { min: straightMin, src: "anomaly", straightM: straightM, routeM: rt.m };
+      }
+      return { min: Math.ceil(rt.m / WALK_M_PER_MIN) + ENTRY_MIN, src: "route", straightM: straightM, routeM: rt.m };
+    }
+    return { min: straightMin, src: "straight", straightM: straightM, state: rt ? rt.state : undefined };
   }
 
   // 같은 요일 연속 수업 사이 간격이 GAP_MIN 이상이면 공강
@@ -315,15 +328,18 @@
   }
 
   // gap: findGaps 결과 하나, startMin: 계산 시작 시각(분), place: 저장한 곳
-  function judge(gap, startMin, place, elevatorMin) {
+  // routeOf: 길 찾기 결과 조회 함수(없으면 모두 직선 추정)
+  function judge(gap, startMin, place, elevatorMin, routeOf) {
     var remaining = gap.end - startMin;
-    var go = floorMoveMin(floorOf(gap.prev.room), elevatorMin) + walkMin(place, gap.prev.building);
-    var back = walkMin(place, gap.next.building) + floorMoveMin(floorOf(gap.next.room), elevatorMin);
+    var goLeg = walkLeg(place, gap.prev.building, routeOf);
+    var backLeg = walkLeg(place, gap.next.building, routeOf);
+    var go = floorMoveMin(floorOf(gap.prev.room), elevatorMin) + goLeg.min;
+    var back = backLeg.min + floorMoveMin(floorOf(gap.next.room), elevatorMin);
     var stay = remaining - go - back - MARGIN_MIN;
     var ok = stay >= place.stay;
     var arrival = startMin + go;
     return {
-      remaining: remaining, go: go, back: back, stay: stay, ok: ok,
+      remaining: remaining, go: go, back: back, goLeg: goLeg, backLeg: backLeg, stay: stay, ok: ok,
       shortage: ok ? 0 : place.stay - stay,
       leaveAt: gap.end - back - MARGIN_MIN,
       arrival: arrival,
@@ -340,6 +356,154 @@
     return (spare / 2) * WALK_M_PER_MIN / DETOUR;
   }
   /* CALC-END */
+
+  /* ROUTE-START */
+  // ---------- 길 찾기 (routing.openstreetmap.de 도보, 키 없음) ----------
+  var ROUTE_BASE = "https://routing.openstreetmap.de/routed-foot/route/v1/foot/";
+  var ROUTE_TIMEOUT_MS = 8000;
+  var ROUTE_CACHE_MAX = 200;
+  var ROUTE_CACHE_KEY = "routes";
+
+  var routeCache = {};       // key -> { m, line: [[lat, lng], ...], t }
+  var routeStatus = {};      // key -> "pending" | "failed" (이 페이지를 여는 동안만)
+  var routeQueue = [];       // [{ key, from, to }]
+  var routeBusy = false;
+  var routeSeq = 0;
+  var routeListener = null;  // 결과가 바뀔 때마다 부르는 함수
+
+  function routeKey(from, to) {
+    return from.lat.toFixed(5) + "," + from.lng.toFixed(5) + ">" + to.lat.toFixed(5) + "," + to.lng.toFixed(5);
+  }
+
+  // OSRM 응답 -> { m, line } 또는 null(이상한 응답)
+  function parseRoute(json) {
+    if (!json || json.code !== "Ok" || !Array.isArray(json.routes) || json.routes.length === 0) return null;
+    var r = json.routes[0];
+    if (!r || typeof r.distance !== "number" || !isFinite(r.distance) || r.distance < 0) return null;
+    var co = r.geometry && r.geometry.coordinates;
+    if (!Array.isArray(co) || co.length < 1) return null;
+    var line = [];
+    for (var i = 0; i < co.length; i++) {
+      var c = co[i];
+      if (!Array.isArray(c) || typeof c[0] !== "number" || typeof c[1] !== "number" ||
+          !isFinite(c[0]) || !isFinite(c[1])) return null;
+      line.push([c[1], c[0]]);
+    }
+    return { m: r.distance, line: line };
+  }
+
+  function isValidRouteEntry(e) {
+    return e && typeof e.m === "number" && isFinite(e.m) && e.m >= 0 &&
+      typeof e.t === "number" && Array.isArray(e.line) &&
+      e.line.every(function (pt) { return Array.isArray(pt) && pt.length === 2 && isFinite(pt[0]) && isFinite(pt[1]); });
+  }
+
+  function loadRouteCache() {
+    try {
+      var raw = localStorage.getItem(ROUTE_CACHE_KEY);
+      if (raw === null) return;
+      var data = JSON.parse(raw);
+      if (!data || typeof data !== "object" || Array.isArray(data)) return;
+      Object.keys(data).forEach(function (k) {
+        if (isValidRouteEntry(data[k])) {
+          routeCache[k] = data[k];
+          if (data[k].t > routeSeq) routeSeq = data[k].t;
+        }
+      });
+    } catch (e) { /* 깨진 값은 무시하고 빈 캐시로 시작 */ }
+  }
+
+  function saveRouteCache() {
+    var keys = Object.keys(routeCache);
+    if (keys.length > ROUTE_CACHE_MAX) {
+      keys.sort(function (a, b) { return routeCache[a].t - routeCache[b].t; });
+      keys.slice(0, keys.length - ROUTE_CACHE_MAX).forEach(function (k) { delete routeCache[k]; });
+    }
+    try { localStorage.setItem(ROUTE_CACHE_KEY, JSON.stringify(routeCache)); } catch (e) { /* 메모리 캐시만 씀 */ }
+  }
+
+  // 조회: { state: "ok", m, line } | { state: "pending" | "failed" } | undefined(요청한 적 없음)
+  function routeOf(building, place) {
+    var key = routeKey(BUILDING_COORDS[building], place);
+    var c = routeCache[key];
+    if (c) return { state: "ok", m: c.m, line: c.line };
+    if (routeStatus[key]) return { state: routeStatus[key] };
+    return undefined;
+  }
+
+  // 건물 -> 장소 한 방향만 요청. 돌아오는 길에도 같은 거리를 씀. urgent면 대기열 맨 앞
+  function requestRoute(building, place, urgent) {
+    var from = BUILDING_COORDS[building];
+    var key = routeKey(from, place);
+    if (routeCache[key] || routeStatus[key] === "failed") return;
+    if (routeStatus[key] === "pending") {
+      if (urgent) {
+        for (var i = 0; i < routeQueue.length; i++) {
+          if (routeQueue[i].key === key) { routeQueue.unshift(routeQueue.splice(i, 1)[0]); break; }
+        }
+      }
+      return;
+    }
+    routeStatus[key] = "pending";
+    var task = { key: key, from: from, to: { lat: place.lat, lng: place.lng } };
+    if (urgent) routeQueue.unshift(task); else routeQueue.push(task);
+    routePump();
+  }
+
+  // 한 번에 하나씩 순서대로
+  function routePump() {
+    if (routeBusy || routeQueue.length === 0) return;
+    routeBusy = true;
+    var task = routeQueue.shift();
+    var finished = false;
+    var timer = null;
+    function finish(parsed) {
+      if (finished) return;
+      finished = true;
+      if (timer) clearTimeout(timer);
+      if (parsed) {
+        routeCache[task.key] = { m: parsed.m, line: parsed.line, t: ++routeSeq };
+        delete routeStatus[task.key];
+        saveRouteCache();
+      } else {
+        routeStatus[task.key] = "failed";
+      }
+      routeBusy = false;
+      if (routeListener) routeListener();
+      routePump();
+    }
+    try {
+      var url = ROUTE_BASE +
+        task.from.lng.toFixed(6) + "," + task.from.lat.toFixed(6) + ";" +
+        task.to.lng.toFixed(6) + "," + task.to.lat.toFixed(6) +
+        "?overview=full&geometries=geojson";
+      var ctrl = new AbortController();
+      timer = setTimeout(function () { ctrl.abort(); }, ROUTE_TIMEOUT_MS);
+      fetch(url, { signal: ctrl.signal })
+        .then(function (res) { if (!res.ok) throw new Error("http " + res.status); return res.json(); })
+        .then(function (json) { finish(parseRoute(json)); })
+        .catch(function () { finish(null); });
+    } catch (e) {
+      finish(null);
+    }
+  }
+
+  // pairs: [{ building, place }]. 같은 쌍은 한 번만 셈
+  function routeProgress(pairs) {
+    var seen = {}, total = 0, done = 0, failed = 0;
+    pairs.forEach(function (pr) {
+      var key = routeKey(BUILDING_COORDS[pr.building], pr.place);
+      if (seen[key]) return;
+      seen[key] = true;
+      total++;
+      if (routeCache[key]) done++;
+      else if (routeStatus[key] === "failed") { done++; failed++; }
+    });
+    return { total: total, done: done, failed: failed };
+  }
+
+  loadRouteCache();
+  /* ROUTE-END */
 
   function isValidClass(c) {
     return c && typeof c === "object" &&
@@ -557,6 +721,20 @@
     return { cls: "ok", text: "가능" };
   }
 
+  function fmtM(m) { return String(Math.round(m)).replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
+
+  // 도보 거리를 어디서 가져왔는지 보여주는 라벨
+  function legLabel(leg) {
+    if (leg.src === "direct") return "직접 잰 값";
+    if (leg.src === "route") return "길 따라 " + fmtM(leg.routeM) + "m (직선 추정이면 약 " + fmtM(leg.straightM) + "m)";
+    if (leg.src === "anomaly") return "직선 추정 (길 데이터 이상: 길 찾기 " + fmtM(leg.routeM) + "m)";
+    return "직선 추정" + (leg.state === "pending" ? " (길 찾는 중)" : leg.state === "failed" ? " (길 찾기 실패)" : "");
+  }
+  function walkLabel(r) {
+    var a = legLabel(r.goLeg), b = legLabel(r.backLeg);
+    return a === b ? a : "가는 길 " + a + " · 오는 길 " + b;
+  }
+
   // 판정 한 줄(목록과 고른 곳 판정에서 같이 씀). extra: 덧붙일 설명 한 줄(선택)
   function buildRow(p, r, extra) {
     var li = el("li", "place-row");
@@ -571,6 +749,7 @@
       : "늦어도 출발 시각 —"));
     li.appendChild(el("p", "place-detail",
       "가는 시간 " + r.go + "분 · 돌아오는 시간 " + r.back + "분 · 필요한 머물 시간 " + p.stay + "분"));
+    li.appendChild(el("p", "place-detail", "도보: " + walkLabel(r)));
     if (p.open !== null) {
       li.appendChild(el("p", "place-detail",
         "영업 " + p.open + "–" + p.close + " · 도착 예정 " + fmt(r.arrival)));
@@ -635,8 +814,26 @@
       note.textContent = "이 공강에서는 머물 시간 " + ggStay + "분을 채우며 갈 수 있는 범위가 없습니다 (직선 기준 대략적인 추정).";
     }
 
+    // 고른 곳까지 길 찾기 결과가 있으면 그 길을 선으로 그림 (길 데이터 이상·대기·실패면 그리지 않음)
+    var pp = pickedPlace();
+    if (pp) {
+      var rp = judge(g, ggCtx.startMin, pp, ggCtx.elevatorMin, routeOf);
+      var legs = [{ b: g.prev.building, leg: rp.goLeg, color: "#c2410c", dash: null }];
+      if (g.next.building !== g.prev.building) {
+        legs.push({ b: g.next.building, leg: rp.backLeg, color: "#6d28d9", dash: "6 6" });
+      }
+      legs.forEach(function (x) {
+        if (x.leg.src !== "route") return;
+        var entry = routeOf(x.b, pp);
+        if (!entry || entry.state !== "ok") return;
+        var opts = { color: x.color, weight: 4, opacity: 0.9, interactive: false };
+        if (x.dash) opts.dashArray = x.dash;
+        L.polyline(entry.line, opts).addTo(overlay);
+      });
+    }
+
     function dot(p, isPicked, isCustom) {
-      var r = judge(ggCtx.g, ggCtx.startMin, p, ggCtx.elevatorMin);
+      var r = judge(ggCtx.g, ggCtx.startMin, p, ggCtx.elevatorMin, routeOf);
       var st = statusOf(r);
       var m = L.circleMarker([p.lat, p.lng], {
         radius: isCustom ? 10 : 8,
@@ -670,7 +867,7 @@
       box.appendChild(el("p", "empty", "지도의 빈 곳이나 저장한 곳 점을 누르면 여기에 판정이 나옵니다."));
       return;
     }
-    var r = judge(ggCtx.g, ggCtx.startMin, p, ggCtx.elevatorMin);
+    var r = judge(ggCtx.g, ggCtx.startMin, p, ggCtx.elevatorMin, routeOf);
     var ul = el("ul", "place-list");
     var extra = ggPicked.type === "custom"
       ? "위치 " + p.lat.toFixed(5) + ", " + p.lng.toFixed(5) + " · 머물 시간은 입력값(" + ggStay + "분)을 씁니다"
@@ -681,6 +878,11 @@
 
   function refreshPicked() {
     if (!map) return;
+    var pk = pickedPlace();
+    if (pk && ggCtx) {   // 고른 곳의 길은 대기열 맨 앞으로
+      requestRoute(ggCtx.g.prev.building, pk, true);
+      if (ggCtx.g.next.building !== ggCtx.g.prev.building) requestRoute(ggCtx.g.next.building, pk, true);
+    }
     drawOverlay();
     renderPicked();
   }
@@ -775,13 +977,27 @@
     var g = gaps[ggGap];
     var startMin = isNow(g) ? now : g.start;
 
+    // 길 찾기 요청(이미 받았거나 요청 중인 쌍은 건너뜀). 판정은 먼저 직선 추정으로 보여주고 결과가 오면 다시 그림
+    var routePairs = [];
+    places.forEach(function (p) {
+      routePairs.push({ building: g.prev.building, place: p });
+      if (g.next.building !== g.prev.building) routePairs.push({ building: g.next.building, place: p });
+    });
+    routePairs.forEach(function (pr) { requestRoute(pr.building, pr.place, false); });
+    var prog = routeProgress(routePairs);
+
     resultEl.appendChild(el("p", "summary",
       "계산 시작 " + fmt(startMin) + (isNow(g) ? " (현재 시각)" : " (공강 시작)") +
       " · 남은 공강 " + (g.end - startMin) + "분 · 다음 수업 " + fmt(g.end)));
     resultEl.appendChild(el("p", "note",
-      "거리는 직선거리 × 1.3으로 추정한 값이고, 엘리베이터는 " + (ggQuiet ? "한산(" + ELEVATOR_QUIET_MIN : "붐빔(" + ELEVATOR_BUSY_MIN) + "분) 기준입니다. 머물 수 있는 시간이 긴 순으로 정렬했습니다."));
+      "도보 거리는 길 찾기 결과를 쓰고, 길 찾기가 안 되면 직선거리 × 1.3으로 추정합니다. 엘리베이터는 " +
+      (ggQuiet ? "한산(" + ELEVATOR_QUIET_MIN : "붐빔(" + ELEVATOR_BUSY_MIN) + "분) 기준입니다. 머물 수 있는 시간이 긴 순으로 정렬했습니다."));
+    resultEl.appendChild(el("p", "note",
+      prog.done < prog.total ? "길 찾는 중 (" + prog.done + "/" + prog.total + ") — 그동안은 직선 추정으로 보여줍니다."
+      : prog.failed > 0 ? "일부(" + prog.failed + "건)는 길 찾기에 실패해 직선 추정을 씁니다."
+      : "길 찾기 완료"));
 
-    var rows = places.map(function (p) { return { p: p, r: judge(g, startMin, p, elevatorMin) }; })
+    var rows = places.map(function (p) { return { p: p, r: judge(g, startMin, p, elevatorMin, routeOf) }; })
       .sort(function (a, b) { return b.r.stay - a.r.stay; });
 
     var ul = el("ul", "place-list");
@@ -805,6 +1021,14 @@
       pickedEl.hidden = true;
     }
   }
+
+  // 길 찾기 결과가 올 때마다 공강 화면을 다시 그림 (연속으로 와도 한 번에 모아서)
+  var routeRenderQueued = false;
+  routeListener = function () {
+    if (routeRenderQueued) return;
+    routeRenderQueued = true;
+    setTimeout(function () { routeRenderQueued = false; renderGonggang(); }, 0);
+  };
 
   // ---------- 추가·삭제 ----------
   var msgEl = document.getElementById("form-msg");
